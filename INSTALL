@@ -1,0 +1,20 @@
+easy_intall pip
+
+pip install celery
+
+pip install flower
+
+pip install django
+pip install django-celery
+
+pip install apscheduler
+pip install pyinotify
+
+#centos
+#wget https://pypi.python.org/packages/source/M/MySQL-python/MySQL-python-1.2.4.zip#md5=ddf2386daf10a97af115ffad2ed4a9a0 --no-check-certificate
+ 
+#unzip MySQL-python-1.2.4.zip
+#cd MySQL-python-1.2.4
+#python setup.py install
+
+#yum install MySQL-python

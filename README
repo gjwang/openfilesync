@@ -1,0 +1,139 @@
+                        易视腾同步系统部署
+
+一，本系统基于python开发，在python2.6/python2.7运行环境，使用python需要一些第三方工具包。以下工具包在所有的同步服务器均需部署
+
+1, setuptools
+$wget       http://pypi.python.org/packages/source/s/setuptools/setuptools-1.0.tar.gz --no-check-certificate
+$tar xvfz setuptools-1.0.tar.gz
+$cd setuptools-1.0
+$python setup.py install
+
+2, pip
+use: easy_install pip
+or download and install
+$wget http://pypi.python.org/packages/source/p/pip/pip-1.4.1.tar.gz --no-check-certificate
+$tar xvfz pip-1.4.1.tar.gz
+$ cd pip-1.4.1
+$ python setup.py install
+
+3,其它相关包
+$pip install celery
+$pip install django
+$pip install django-celery
+$pip install apscheduler
+$pip install pyinotify
+
+二，client端部署（即主服务端）
+
+1，  nginx安装，用于发布
+2，  安装redis数据库
+
+$wget http://redis.googlecode.com/files/redis-2.2.11.tar.gz
+$tar xzf redis-2.2.11.tar.gz
+$cd redis-2.2.11
+$make && make install;
+
+$cp ./redis.conf /etc/redis.conf
+$vi /etc/redis.conf
+修改redis.conf的daemonize no改为daemonize yes
+comment dump.rdb: #dbfilename dump.rdb
+
+$redis-server /etc/redis.conf   #启动redis服务
+
+3，  同步软件openfilesync部署
+将openfilesync程序拷贝到client的服务器上
+client端（主服务器）配置
+client端配置文件为openfilesync文件夹下config.py
+
+$vim config.py(红色为修改部分)
+
+#source/client configue     #client端配置
+wwwroot = '/data/ccc'      #要监控的本地目录，即nginx中的发布路径
+monitorpath = wwwroot      #Can monitor the subdir of the wwwroot
+httphostname = 'http://183.60.150.108'  #client端IP
+
+#exts of files NOT sync
+exclude_exts=['.pyc', '.bak', '.ddd', '.svn', '.tmp']
+
+#message server config
+broker = "redis://127.0.0.1:6379//"     #client端redis与openfilesync为同一服务器
+backend = "redis://127.0.0.1:6379//"
+
+ 
+#destion/worker configure          #worker端配置
+#message server config
+worker_broker = "redis://183.60.150.108:6379//"   #redis数据库源
+worker_backend = "redis://183.60.150.108:6379//"  
+
+dstdir = '/home/quanyy/backup'    #worker端同步路径
+dstwwwroot = dstdir               
+dstmonitorpath = dstwwwroot       #if client monitor the subdir, then worker do the same thing
+
+ 
+
+#use 2**retry_times backoff methon, don't retry too much times unless you kwow what you are doing
+MAX_RETRY_TIMES = 7
+
+4, 启动client端服务(3个脚本)
+进入openfilesync文件夹
+sh eventprocessord.sh start  #实时监控路径下文件夹和文件的变化
+sh monitord.sh start        #监控worker组上下线
+#shut down the flower monitor in a long working enviroment
+sh flowerd.sh start    #启用页面监控如http：// http://183.60.150.108:5555/(可不启动)
+
+ 
+
+三 worker端部署
+1,将openfilesync程序拷贝到worker端的服务器上
+2,worker端配置
+worker端配置配置文件为openfilesync文件夹下的config.py的下半部分，即#destion/worker configure以下的部分， 因本同步系统client端和worker端配置均在config.py里， 所以只需要在client端配置好一个config.py的worker配置， 其他worker端的config.py从client拷贝即可(假设每个worker下载文件存放的路径相同)， 具体配置见client的config.py
+
+3 修改worker端启动脚本
+Every worker should use a unique worker name and queue name to identify with other workers. 
+To simplify, in a worker, the worker name and the queue name can be the same
+
+vi ./openfilesync/workerd.sh
+#!/bin/sh -e
+# chkconfig: 2345 08 92
+# description: Automatically startup worker service.
+
+workername="183.60.150.109"   #可以随意命名，但同worker组中必须唯一
+workqueue=$workername
+broker="redis://183.60.150.108:6379//"   #redis数据库源
+logfile="log/worker.log"
+
+startup()
+{
+        celery --app=celeryfilesync.tasks worker -n ${workername} -Q ${workqueue} --concurrency=2  --broker=${broker} --loglevel=info --logfile=${logfile} &
+
+}
+
+shutdown()
+{
+        ps -ef|grep "celery --app=celeryfilesync.tasks worker -n $workername -Q $workqueue"|grep -v grep|awk '{print $2}'|xargs kill
+}
+
+case "$1" in
+        start)
+                startup
+                ;;
+        stop)
+                shutdown
+                ;;
+        restart)
+                shutdown
+                startup
+                ;;
+esac
+exit
+
+ 
+4 启动worker端服务
+进入openfilesync文件夹
+sh workerd.sh start   
+
+What's news:
+1, add filesize verify
+2, special treat *.m3u8 files: sync it any time after "write closed"
+3, modify worker loglevel from info to warn
+4, because of a bug of pyinotify, don't support rename dirs in monitorpath, please use copy&remove way tempery.
