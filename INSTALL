@@ -1,4 +1,4 @@
-easy_intall pip
+easy_install pip
 
 pip install celery
 
