@@ -153,7 +153,11 @@ class EventHandler(pyinotify.ProcessEvent):
 
         url = self.mergeurl(event.pathname)
         self._logging.info("Closewrite: %s, push: url: %s", event.pathname, url)
-        self.notifyworker(download, (url, getsize(event.pathname), None) )
+	try:
+	    filesz = getsize(event.pathname)
+            self.notifyworker(download, (url, filesz, None) )
+	except Exception as exc:
+	    self._logging.error("%s", exc)
             
  
     def process_IN_ISDIR(self, event):
