@@ -1,7 +1,7 @@
 '''
 Created on 2013-8-6
 
-@author: Administrator
+@author: gjwang
 '''
 
 
@@ -163,15 +163,19 @@ def my_monitor(app):
         #print "%s, eventtype: %s, time: %s" % (hostname, event['type'], timestamp)
         _logging.info("%s, eventtype: %s, time: %s", hostname, event['type'], timestamp)
 
-    with app.connection() as connection:
-        recv = app.events.Receiver(connection, handlers={
-                'task-failed': announce_failed_tasks,
-                'worker-heartbeat': announce_dead_workers,
-                'worker-online': worker_online,
-                'worker-offline': on_worker_offline,
-                '*': on_events,
-        })
-        recv.capture(limit=None, timeout=None, wakeup=True)
+    def capture():
+        with app.connection() as connection:
+            recv = app.events.Receiver(connection, handlers={
+                    'task-failed': announce_failed_tasks,
+                    'worker-heartbeat': announce_dead_workers,
+                    'worker-online': worker_online,
+                    'worker-offline': on_worker_offline,
+                    '*': on_events,
+            })
+            recv.capture(limit=None, timeout=None, wakeup=True)
+
+    capture()
+
 
 if __name__ == '__main__':
     formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
@@ -191,5 +195,16 @@ if __name__ == '__main__':
     #celery = Celery(broker='amqp://guest:guest@127.0.0.1:5672//')
     print "begin to monitor workers online..."
     logger.info("begin to monitor workers online...")
-    my_monitor(celery)
+    #my_monitor(celery)
+
+    retries = 1
+    while True:
+        try:
+            #celery = Celery(broker=broker)
+	    my_monitor(celery)
+        except Exception as exc:
+	    retries += 1
+            sectime = min(2 ** retries, 4096)
+            logger.error('lost connection, retries in %s secs: %s', sectime, exc)
+            time.sleep(sectime)
     
