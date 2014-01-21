@@ -84,7 +84,7 @@ def download(url, filesize = None, localFileName = None):
 
         if os.path.exists(localName) and getsize(localName) == filesize \
            and splitext(localName)[1].lower() not in special_exts:
-            logger.error("File \'%s\' existed.", url)
+            logger.info("File \'%s\' existed and filesize(%s) equals", url, filesize)
         else:
             dstdirname = dirname(localName)
             #print "dstdirname:",dstdirname
@@ -190,10 +190,10 @@ def rmemptydir(url, localfilename = None):
             return ex
 
     elif os.path.exists(localname):
-        logger.error('%s not a dir', localname)
+        logger.error('rmemptydir: %s not a dir', localname)
         return '%s not a dir' % (localname)
     else:
-        logger.error('%s dir not exists', localname)
+        logger.info('rmemptydir: %s dir not exists', localname)
         return '%s dir not exists' % (localname)
 
 
@@ -213,7 +213,7 @@ def rmfile(url, localfilename = None):
             logger.error("rmfile: %s failed: %s", localname, ex)
             return ex
     else:
-        logger.error('%s file not exists', localname)
+        logger.info('rmfile: %s file not exists', localname)
         return '%s file not exists' % (localname)
 
 #filesync rename
@@ -234,7 +234,7 @@ def fsrename(src, dst):
     return "OK"
 
 
-@task(default_retry_delay=10, max_retries=3)
+@task(default_retry_delay=10, max_retries=1)
 #@periodic_task(run_every=crontab(hour='*', minute='*/1', day_of_week='*'))
 def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):    
     dstdirs, dstfiles = visitdir(dstmonitorpath, dstwwwroot)

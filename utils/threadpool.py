@@ -207,7 +207,7 @@ class _ThreadPool(object):
                 if timeout is not None:
                     current = time.time()
                     if (current - start) > timeout:
-                        self.__logger.info('Thread pool timeout')
+                        self.__logger.error('Thread pool timeout')
                         break
         finally:
             self._condition.release()
@@ -219,7 +219,7 @@ class _ThreadPool(object):
                 if timeout is not None:
                     current = time.time()
                     if (current - start) > timeout:
-                        self.__logger.info('process failed tasks timeout')
+                        self.__logger.error('process failed tasks timeout')
                         break
         finally:
             self.__failed_condition.release()
