@@ -32,7 +32,7 @@ case "$1" in
                 ;;
 
         *)
-                echo "usage: startup | shutdown | restart"
+                echo "usage: start | stop | restart"
                 exit 1
                 ;;
 esac

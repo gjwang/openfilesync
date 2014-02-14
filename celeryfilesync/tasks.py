@@ -11,10 +11,12 @@ import urllib
 import urllib2
 
 from celery import task
+from celery.task.schedules import crontab
+from celery.decorators import periodic_task
 from celery.task import current
 from celery import Celery
-from celery.schedules import crontab
-from celery.task import periodic_task
+#from celery.schedules import crontab
+#from celery.task import periodic_task
 
 import os
 from urlparse import urlsplit
@@ -67,15 +69,11 @@ def download(url, filesize = None, localFileName = None):
         if localFileName != None:
             localName = localFileName
         else:
-            #print "dstdir:", dstdir
             localName = join(dstdir, urlsplit(url).path[1:])
-
-        #fake url, use for test task failed
-        #url = 'http://www.example.com/songs/mp3.mp3'
 
         req = None
 
-        if filesize == None:
+        if filesize is None:
             req = urllib2.Request(url)
             r = urllib2.urlopen(req)
             filesize = r.headers["Content-Length"]
@@ -87,39 +85,34 @@ def download(url, filesize = None, localFileName = None):
             logger.info("File \'%s\' existed and filesize(%s) equals", url, filesize)
         else:
             dstdirname = dirname(localName)
-            #print "dstdirname:",dstdirname
             if not os.path.exists(dstdirname):
                 os.makedirs(dstdirname)
 
-            if req == None:
+            if req is None:
                 req = urllib2.Request(url)
                 r = urllib2.urlopen(req)
             
-            #with open(localName, "wb") as file:
-            #    file.write(r.read())
-
-            f = open(localName, 'wb')
-            file_size_dl = 0
-            block_sz = 8192*4
-            while True:
-                buffer = r.read(block_sz)
-                if not buffer:
-                    break
-                #file_size_dl += len(buffer)
-                f.write(buffer)
-                #status = r"%10d  [%3.2f%%]" % (file_size_dl, file_size_dl * 100. / file_size)
-                #status = status + chr(8)*(len(status)+1)
-                #print status,
+            block_sz = 8192*2
+            f= open(localName, 'wb')
+            #with open(localName, 'wb') as f:
+            if 1:
+                while True:
+                    buffer = r.read(block_sz)
+                    if not buffer:
+                        break
+                    f.write(buffer)
             f.close()
-            
-            #sz = getsize(localName)
-            #if sz != filesize:
-            #    raise Exception("download %s unfinished: filesz:%s != localfilesz:%s" % (url, filesize, sz))
-            logger.info("down: %s to %s OK", url, localName)
 
-        return True        
+            sz = getsize(localName)
+            if sz != filesize:
+                logger.error("download %s unfinished: filesz:%s != localfilesz:%s" % (url, filesize, sz))
+                raise Exception("download %s unfinished: filesz:%s != localfilesz:%s" % (url, filesize, sz))
+            logger.info("down: %s to %s OK", url, localName)
+        return True 
     except Exception, exc:
         logger.info("down: %s to %s failed: %s", url, localName, exc)
+        if isinstance(exc, urllib2.HTTPError) and exc.code == 404:
+            return True
         current.retry(exc=exc, countdown=min(2 ** current.request.retries, 360))
 
 #@task
@@ -234,7 +227,7 @@ def fsrename(src, dst):
     return "OK"
 
 
-@task(default_retry_delay=10, max_retries=1)
+@task(default_retry_delay=10, max_retries=0)
 #@periodic_task(run_every=crontab(hour='*', minute='*/1', day_of_week='*'))
 def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):    
     dstdirs, dstfiles = visitdir(dstmonitorpath, dstwwwroot)
@@ -243,17 +236,19 @@ def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):
     rmdirs = set(dstdirs) - set(srcdirs)
     rmfiles = set(dstfiles) - set(srcfiles)
 
-    #print "rmfiles set:  ", rmfiles
+    logger.warn("rmfiles count=%s", len(rmfiles))
     for f, _ in rmfiles:
         file = join(dstdir, f)
+        logger.info('Going to rm file: %s', file)
         rmfile(None, file)
 
-    #print "rmdirs set:   ", rmdirs
+    logger.warn("rmdirs count=%s", len(rmdirs))
     for d in rmdirs:
         dir = join(dstdir, d)
+        logger.info('Going to rm dir: %s', dir)
         rmemptydir(None, dir)
 
-    #print "downfiles set:", downloadfiles
+    logger.warn("downfiles set count=%s", len(downloadfiles))
 
     failed_downloads = []
     
