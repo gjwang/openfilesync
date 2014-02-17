@@ -66,10 +66,14 @@ def sendMsg(msg):
 def download(url, filesize = None, localFileName = None):
     try:
         global dstdir
+
         if localFileName != None:
             localName = localFileName
         else:
             localName = join(dstdir, urlsplit(url).path[1:])
+
+        if splitext(localName)[1].lower() in exclude_exts:
+            logger.info("exclude file: %s", localName)  
 
         req = urllib2.Request(url)
         r = urllib2.urlopen(req)
@@ -246,14 +250,8 @@ def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):
         logger.info('Going to rm dir: %s', dir)
         rmemptydir(None, dir)
 
-    logger.warn("downfiles set count=%s", len(downloadfiles))
-
     failed_downloads = []
     
-    #fake urls, for test failed downloads
-    #downloadfiles.add(( 'http://www.example.com/songs/mp3.mp3', 0) )
-    #downloadfiles.add(( 'http://www.example.com/songs/mp3_2.mp3', 0) )
-
     #for (f, filesize) in downloadfiles:
         #url = join(hostname, f)
         #try:
