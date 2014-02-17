@@ -71,14 +71,14 @@ def download(url, filesize = None, localFileName = None):
         else:
             localName = join(dstdir, urlsplit(url).path[1:])
 
-        req = None
+        req = urllib2.Request(url)
+        r = urllib2.urlopen(req)
+        file_len = int(r.headers["Content-Length"])
 
-        if filesize is None:
-            req = urllib2.Request(url)
-            r = urllib2.urlopen(req)
-            filesize = r.headers["Content-Length"]
+        if filesize is not None and filesize != file_len:
+            logger.error("filesize(%s) != file_len(%s): %s", filesize, file_len, url)
 
-        filesize = int(filesize)
+        filesize = file_len
 
         if os.path.exists(localName) and getsize(localName) == filesize \
            and splitext(localName)[1].lower() not in special_exts:
@@ -87,10 +87,6 @@ def download(url, filesize = None, localFileName = None):
             dstdirname = dirname(localName)
             if not os.path.exists(dstdirname):
                 os.makedirs(dstdirname)
-
-            if req is None:
-                req = urllib2.Request(url)
-                r = urllib2.urlopen(req)
             
             block_sz = 8192*2
             f= open(localName, 'wb')
@@ -108,6 +104,8 @@ def download(url, filesize = None, localFileName = None):
                 logger.error("download %s unfinished: filesz:%s != localfilesz:%s" % (url, filesize, sz))
                 raise Exception("download %s unfinished: filesz:%s != localfilesz:%s" % (url, filesize, sz))
             logger.info("down: %s to %s OK", url, localName)
+
+        r.close()
         return True 
     except Exception, exc:
         logger.info("down: %s to %s failed: %s", url, localName, exc)
