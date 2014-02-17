@@ -21,18 +21,25 @@ from celeryfilesync.tasks import add, sendMsg, download, download_list
 
 from config import monitorpath, wwwroot, httphostname, exclude_exts, broker
 
+WHOLE_SYNC_INTERVAL = 60*30
+
 timeout = 2000 / 1000.0
 
 def my_monitor(app):
     _logging = logging.getLogger()
 
     state = app.events.State()
+    app.control.rate_limit('celeryfilesync.tasks.download_list', '1/m')
+
     inspecter = app.control.inspect(timeout=timeout)
 
     workers_lastonlinetime = {}
     worker_queue = {}
 
     workers_offlinetime = {}
+    workers_status = {}#'workername':{'is_online':True, 'last_online_time': 138, 'last_whole_sync_time': 138, 
+                       #'whole_sync_task_ids'['', '']  }
+
 
     def get_worker_queue():
         active_queues = inspecter.active_queues() or {}
@@ -40,8 +47,19 @@ def my_monitor(app):
         for worker in active_queues:
             queue0 = active_queues[worker][0]
             worker_queue[worker] = queue0['name']
-            
-        #print worker_queue
+
+	    worker_st = workers_status.get(worker)
+            if worker_st is None:
+                worker_st = {}
+                worker_st['queue'] = queue0['name']
+                worker_st['is_online'] = True
+                worker_st['last_online_time'] = time.time()
+                worker_st['last_whole_sync_time'] = 0
+                worker_st['whole_sync_task_ids'] = []
+                workers_status[worker] = worker_st
+	    else:
+                worker_st['queue']= queue0['name']
+                worker_st['is_online'] = True
 
     def allhost_do_whole_sync():
         get_worker_queue()
@@ -49,19 +67,26 @@ def my_monitor(app):
         dirslist, fileslist = visitdir(monitorpath, wwwroot, exclude_exts)
         queues = worker_queue.values() 
 
-        for queue in queues:
-            print "%s online now. Do a whole sync" % (queue)
-            _logging.debug("download_list.apply_async(args=(%s, %s), queue=%s)", dirslist, fileslist, queue)
-            res = download_list.apply_async(args=(dirslist, fileslist, httphostname), queue=queue)
-            try:
-                print "taskid: %s" % (res.id)
-                _logging.info("taskid: %s", res.id)
-            except Exception as e:
-                print e
+        #for queue in queues:
+	for worker, status in workers_status.items():
+            if status['is_online']:
+                if time.time() - status['last_whole_sync_time'] < WHOLE_SYNC_INTERVAL:
+		    _logging.error('woker:%s do whole sync too frequent(less than %s seconds), ignore this time',
+                                    worker, WHOLE_SYNC_INTERVAL)
+                    continue
+
+                #TODO: revoke the unstarted whole sync tasks
+                queue = status['queue']
+                _logging.info("%s online now. Do a whole sync", worker)
+                res = download_list.apply_async(args=(dirslist, fileslist, httphostname), queue=queue, expires=1800, retry=False)
+                try:
+                    _logging.info("taskid: %s", res.id)
+                    #status['whole_sync_task_ids'].append(res.id)
+                except Exception as e:
+                    _logging.error('get taskid exception: %s', e)
 
         
     #notifiy hosts a whole sync at startup
-    print "notifiy all hosts a whole sync at startup"
     _logging.info("notifiy all hosts a whole sync at startup")
     allhost_do_whole_sync()
 
@@ -78,23 +103,17 @@ def my_monitor(app):
         if queue:
             dirslist, fileslist = visitdir(monitorpath, wwwroot, exclude_exts)
 
-            print "%s:%s worker online now. Do a whole sync" % (hostname, queue)
             _logging.info("%s:%s worker online now. Do a whole sync", hostname, queue)
-            _logging.debug("download_list.apply_async(args=(%s, %s), queue=%s)", dirslist, fileslist, queue)
             try:
-                print "httphostname: ", httphostname
-                res = download_list.apply_async(args=(dirslist, fileslist, httphostname), queue=queue)
-                print "taskid: %s" % (res.id)
+                res = download_list.apply_async(args=(dirslist, fileslist, httphostname), queue=queue, expires=1800, retry=False)
                 _logging.info("taskid: %s", res.id)
             except Exception as e:
-                print e
-                _logging.error("Except: %s", e)
+                _logging.error("Exception: %s", e)
 
 
     def announce_failed_tasks(event):
         state.event(event)
         task_id = event['uuid']
-        print('event: %s' % (pformat(event, indent=4), ))
         _logging.error("TASK FAILED: event: %s", pformat(event, indent=4))
 
         #print('TASK FAILED: %s[%s] %s' % (
@@ -102,26 +121,29 @@ def my_monitor(app):
 
     def worker_online(event):
         hostname = event['hostname']
-        state.event(event) #this methon would delete hostname field
+        state.event(event) #this method would delete hostname field
         #print('event: %s' % (pformat(event, indent=4), ))
         #print event['type']    
         
         timestamp = event['timestamp']
 
-        #if workers_offlinetime.get(hostname):
-        #   del workers_offlinetime[hostname]
-
         workers_offlinetime.pop(hostname, None)
 
         if hostname in workers_lastonlinetime:
             #filter the same online event
-            if (int(timestamp) - int(workers_lastonlinetime[hostname])) < 5:
+            if (int(timestamp) - int(workers_lastonlinetime[hostname])) < WHOLE_SYNC_INTERVAL:
                 #print('the same event: %s' % (pformat(event, indent=4), ))
                 return
 
             _logging.info("worker %s last online time: %s", hostname, workers_lastonlinetime[hostname])
 
         workers_lastonlinetime[hostname] = timestamp
+        #worker_st = workers_status.get(hostname)
+        #if worker_st is not None:
+        #    worker_st['is_online'] = True
+        #    worker_st['last_whole_sync_time'] = time.time()
+
+
         do_whole_sync(hostname)
  
     def on_worker_offline(event):
@@ -130,10 +152,12 @@ def my_monitor(app):
         #print('event: %s' % (pformat(event, indent=4), ))
         #print event['type'] 
         timestamp = event['timestamp']
-        #print "%s last offline time %d" % (hostname, timestamp)
         
         _logging.info("worker %s offline time %s", hostname, timestamp)
         
+        worker_st = workers_status.get(hostname)
+        if worker_st is not None:
+            worker_st['is_online'] = False
 
     def announce_dead_workers(event):
         hostname = event['hostname']
@@ -148,7 +172,6 @@ def my_monitor(app):
                 if workers_offlinetime.get(hostname):
                     return
                 else:
-                    print('Worker %s missed heartbeats' % (hostname))
                     workers_offlinetime[hostname] = event['timestamp']
                     _logging.info('Worker %s missed heartbeats', hostname)
             
@@ -160,7 +183,6 @@ def my_monitor(app):
         state.event(event)
         #print('event2: %s' % (pformat(event, indent=4), ))
         timestamp = event['timestamp']
-        #print "%s, eventtype: %s, time: %s" % (hostname, event['type'], timestamp)
         _logging.info("%s, eventtype: %s, time: %s", hostname, event['type'], timestamp)
 
     def capture():
@@ -204,7 +226,7 @@ if __name__ == '__main__':
 	    my_monitor(celery)
         except Exception as exc:
 	    retries += 1
-            sectime = min(2 ** retries, 4096)
+            sectime = min(2 ** retries, 1800)
             logger.error('lost connection, retries in %s secs: %s', sectime, exc)
             time.sleep(sectime)
     
