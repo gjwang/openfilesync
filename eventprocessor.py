@@ -53,15 +53,15 @@ class EventHandler(pyinotify.ProcessEvent):
     class CheckActivQueueThread(threading.Thread):
         def __init__(self, func):
             threading.Thread.__init__(self)
+            self._logging = logging.getLogger(self.__class__.__name__)
             self.stop = False
             self.func = func
         def run(self):
             while self.stop == False:
-                #print "checkaliveworker"
                 try:
                     self.func()
                 except Exception as e:
-                    print e  
+                    self._logging.error('check active workers exception: %s', e)  
                 time.sleep(CHECK_ACTIVE_QUEUE_TIME)
 
         def stop(self):
@@ -93,23 +93,17 @@ class EventHandler(pyinotify.ProcessEvent):
 
             diffset = tmp_set - worker_set
             if len(diffset):
-                #print "workers %s new online" % (diffset)
                 self._logging.info("workers %s new online", diffset)                
 
             diffset = worker_set - tmp_set
             if len(diffset):
-                #print "workers %s offline" % (diffset)
                 self._logging.info("workers %s offline", diffset)
 
-
-            #print "workersonline: %s" % (self.workers_online)
             self._logging.info("workersonline: %s",self.workers_online)
 
 
-        #print "workersonline: %s" % (self.workers_online)
 
     def process_IN_CREATE(self, event):
-        #self.checkaliveworker()
         #print "event:", str(event)
         #self._logging.info("event: %s", str(event))
         #print "type event:", type(event)
@@ -120,7 +114,6 @@ class EventHandler(pyinotify.ProcessEvent):
             self._logging.info("Creating folder: \'%s\', relativepath %s", event.pathname, relativepath)
             mkemptydir(relativepath = relativepath)
         else:
-            #print "Creating file: %s. Ignore it" % (event.pathname)
             self._logging.info("Creating file: \'%s\'. Ignore this event", event.pathname)
 
         
@@ -133,11 +126,9 @@ class EventHandler(pyinotify.ProcessEvent):
         #print url
 
         if event.dir == True:
-            #print "remove folder:", event.pathname            
             self._logging.info("remove folder: %s", event.pathname)
             self.notifyworker(rmemptydir, (url, None))
         else:
-            #print "remove file: %s" % (event.pathname)
             self._logging.info("remove file: %s", event.pathname)
             self.notifyworker(rmfile, (url, None))
 
@@ -202,16 +193,14 @@ class EventHandler(pyinotify.ProcessEvent):
         for q in queues:
             try:
                 self._logging.info("push: %s.apply_async(args=%s, queue=%s)", func, arg, q)
-                res = func.apply_async(args=arg, queue=q, retry=True, retry_policy={
+                res = func.apply_async(args=arg, queue=q, expires=3600*24, retry=True, retry_policy={
                                                                                     'max_retries': 3,
                                                                                     'interval_start': 5,
                                                                                     'interval_step': 1,
                                                                                     'interval_max': 100,}
                                        ) 
-                #print "taskid: %s" % (res.id)
                 self._logging.info("taskid: %s", res.id)
             except Exception as e:
-                print e            
                 self._logging.errno("Exception occur while doing: %s(arg=%s, queue=%s), except: %s  ",
                                                                   func, arg, q, e)
                 
