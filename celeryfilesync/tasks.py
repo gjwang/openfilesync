@@ -30,38 +30,31 @@ from config import special_exts, exclude_exts
 
 from utils.threadpool import ThreadPool
 
-#formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
-#log_FileHandler = logging.handlers.TimedRotatingFileHandler(filename = "log/worker_filesync.log",
-#                                                            when = 'midnight',
-#                                                            interval = 1,
-#                                                            backupCount = 7)
+data_dir = './log'
+try:
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+except Exception, exc:
+    print str(exc)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
+log_FileHandler = logging.handlers.TimedRotatingFileHandler(filename = "log/worker.log",
+                                                            when = 'midnight',
+                                                            interval = 1,
+                                                            backupCount = 7)
     
-#log_FileHandler.setFormatter(formatter)
-#log_FileHandler.setLevel(logging.INFO)
-logger = logging.getLogger(__name__)
-#logger.setLevel(logging.INFO)
-#logger.addHandler(log_FileHandler)
+log_FileHandler.setFormatter(formatter)
+log_FileHandler.setLevel(logging.INFO)
+#logger = logging.getLogger(__name__)
+from celery.utils.log import get_task_logger
+logger = get_task_logger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(log_FileHandler)
 
 
 celery = Celery('celeryfilesync',
                 broker=worker_broker,
                 backend=worker_backend,
                 include=['celeryfilesync.tasks'])
-
-@task
-def hello():
-    return 'hello world'
-
-def mul(x, y):
-    return x * y
-
-@task()
-def add(x, y):
-    return x + y
-
-@task
-def sendMsg(msg):
-    return msg
 
 @task(default_retry_delay=10, max_retries=MAX_RETRY_TIMES)
 def download(url, filesize = None, localFileName = None):

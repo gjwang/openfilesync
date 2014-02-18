@@ -10,7 +10,7 @@ logfile="log/worker.log"
 startup()
 {
 	#cd /home/wgj/celery_proj/openfilesync || exit 0        
-	celery --app=celeryfilesync.tasks worker -n ${workername} -Q ${workqueue} --concurrency=2  --broker=${broker} --loglevel=warn --logfile=${logfile} &	
+	celery --app=celeryfilesync.tasks worker -n ${workername} -Q ${workqueue} --concurrency=2  --broker=${broker} --loglevel=info --logfile=${logfile} -E &	
 }
 
 shutdown()
