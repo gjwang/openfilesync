@@ -11,22 +11,24 @@ import celery
 from celery import current_app
 from celery.task.sets import TaskSet
 from celery import group
-from celeryfilesync.tasks import add, sendMsg, download, rmfile, mkemptydir, rmemptydir, fsrename
+from celeryfilesync.tasks import add, sendMsg, download, download_list, rmfile, mkemptydir, rmemptydir, fsrename
 
 import pyinotify
+from apscheduler.scheduler import Scheduler
 
 import os
 from os.path import walk, isfile, join, dirname, basename, normpath, splitext, getsize
 import threading
 from threading import Condition, Lock
-from monitor import my_monitor
 
+from celeryfilesync.visitdir import visitdir
 from config import monitorpath, wwwroot, httphostname, broker, backend, exclude_exts
 
-
-timeout = 2000 / 1000.0
-CHECK_ACTIVE_QUEUE_TIME = 10 #seconds
-
+INSPECT_TIMEOUT = 10
+CHECK_ACTIVE_QUEUE_TIME = 30 #seconds
+MAX_OFFLINE_TIME =  60*30    #seconds
+WHOLE_SYNC_TASK_EXPIRES_TIME = MAX_OFFLINE_TIME
+DOWNLOAD_TASK_EXPIRES_TIME = 3600*24 
 
 class EventHandler(pyinotify.ProcessEvent):
     def __init__(self, app, monitorpath = '/data/', hostname = 'http://127.0.0.1'):
@@ -41,14 +43,38 @@ class EventHandler(pyinotify.ProcessEvent):
 
 
         self.hostname = hostname
-        self.inspecter = app.control.inspect(timeout=timeout)
-        self.workers_online = {}
-        self._condition = Condition(Lock()) 
+        self.inspecter = app.control.inspect(timeout=INSPECT_TIMEOUT)
+        #self.workers_online = {}
+        self.workers_status = {}#'workername':{'last_online_time': 138, 'last_whole_sync_time': 138,
+                                #              'whole_sync_task_ids'['', '']  }
 
-        #self.checkaliveworker()
+        #self._condition = Condition(Lock()) 
+
         self.activeQueueThread = self.CheckActivQueueThread(self.checkaliveworker)
         self.activeQueueThread.start()
 
+        self.sched = Scheduler()
+        self.sched.add_cron_job(self.all_workers_do_whole_sync , day_of_week='*', hour=2, minute=0,second=0)
+        #self.sched.add_cron_job(self.all_workers_do_whole_sync , day_of_week='*', second='*/30')
+        self.sched.start()
+
+    def all_workers_do_whole_sync(self):
+        dirslist, fileslist = visitdir(monitorpath, wwwroot, exclude_exts)
+	now_time = int(time.time())
+        for worker, status in self.workers_status.items():
+	    if now_time - status['last_whole_sync_time'] < WHOLE_SYNC_TASK_EXPIRES_TIME:
+	        self._logging.info("worker:%s do whole_sync too frequent(%s seconds), skip this time",
+				    worker, now_time - status['last_whole_sync_time'])	
+		continue
+
+            try:
+                res = download_list.apply_async(args=(dirslist, fileslist, httphostname),
+                                         queue=status['queue'], expires=WHOLE_SYNC_TASK_EXPIRES_TIME, retry=False)
+		status['last_whole_sync_time'] = now_time
+                self._logging.info("cron job: worker=%s, whole_sync taskid: %s", worker, res.id)
+                #status['whole_sync_task_ids'].append(res.id)
+            except Exception as e:
+                self._logging.error('get whole_sync taskid exception: %s', e)	
 
     class CheckActivQueueThread(threading.Thread):
         def __init__(self, func):
@@ -69,39 +95,67 @@ class EventHandler(pyinotify.ProcessEvent):
 
 
     def checkaliveworker(self):
-        self._tmp_workers = {}
+        #self._tmp_workers = {}
 
         self.active_queues = self.inspecter.active_queues() or {}
+	time_now = int(time.time())
+
+	dirslist = None
+        fileslist = None
         for worker in self.active_queues:
-            #print worker
             queue0 = self.active_queues[worker][0]
-            #print queue0['name']
-            self._tmp_workers[worker] = queue0['name']
+            #self._tmp_workers[worker] = queue0['name']
 
-            #self.workers_online[worker] = queue0['name']
+            status = self.workers_status.get(worker)
+            if status is None:
+		status = {}
+                status['queue'] = queue0['name']
+                status['last_whole_sync_time'] = 0
+                self.workers_status[worker] = status
+                try:
+                    if dirslist is None:
+		        dirslist, fileslist = visitdir(monitorpath, wwwroot, exclude_exts)
+		    res = download_list.apply_async(args=(dirslist, fileslist, httphostname),
+					 queue=status['queue'], expires=WHOLE_SYNC_TASK_EXPIRES_TIME, retry=False)
+                    status['last_whole_sync_time'] = time_now
+                    self._logging.info("worker: %s, new online, whole_sync taskid: %s", worker, res.id)
+                    #status['whole_sync_task_ids'].append(res.id)
+                except Exception as e:
+                    self._logging.error('get whole_sync taskid exception: %s', e)
 
-        tmp_set = set(self._tmp_workers.iteritems())
-        worker_set = set(self.workers_online.iteritems())
-        diffset = tmp_set ^ worker_set
+            status['last_online_time'] = time_now
 
-        if len(diffset) != 0:
-            self._condition.acquire()
-            try:
-                self.workers_online = copy.deepcopy(self._tmp_workers)
-            finally:
-                self._condition.release()
+        for worker, status in self.workers_status.items():
+	    offline_time = int(time.time()) - status['last_online_time']
+            if status['last_online_time'] < time_now:
+                self._logging.info("worker: %s offline, status: %s", worker, status)
 
-            diffset = tmp_set - worker_set
-            if len(diffset):
-                self._logging.info("workers %s new online", diffset)                
+            if offline_time > MAX_OFFLINE_TIME:
+		del self.workers_status[worker]
+                self._logging.info("worker: %s offline time(%s) > max_offline_time(%s)", 
+		                    worker, offline_time, MAX_OFFLINE_TIME)
 
-            diffset = worker_set - tmp_set
-            if len(diffset):
-                self._logging.info("workers %s offline", diffset)
+	self._logging.info('workers status: %s\n', self.workers_status)
 
-            self._logging.info("workersonline: %s",self.workers_online)
+        #tmp_set = set(self._tmp_workers.iteritems())
+        #worker_set = set(self.workers_online.iteritems())
+        #diffset = tmp_set ^ worker_set
+        #if len(diffset) != 0:
+        #    self._condition.acquire()
+        #    try:
+        #        self.workers_online = copy.deepcopy(self._tmp_workers)
+        #    finally:
+        #        self._condition.release()
 
+        #    diffset = tmp_set - worker_set
+        #    if len(diffset):
+        #        self._logging.info("workers %s new online", diffset)                
 
+        #    diffset = worker_set - tmp_set
+        #    if len(diffset):
+        #        self._logging.info("workers %s offline", diffset)
+
+        #    self._logging.info("workersonline: %s",self.workers_online)
 
     def process_IN_CREATE(self, event):
         #print "event:", str(event)
@@ -183,17 +237,19 @@ class EventHandler(pyinotify.ProcessEvent):
     def notifyworker(self, func, arg = ()):
         #TODO: use broadcast to notify all hosts
         #results = []
-        tasks = []
-        self._condition.acquire()
-        try:            
-            queues = self.workers_online.values()
-        finally:
-            self._condition.release()
-        
-        for q in queues:
+        #tasks = []
+        #self._condition.acquire()
+        #try:            
+        #    queues = self.workers_online.values()
+        #finally:
+        #    self._condition.release()
+
+        for worker, status in self.workers_status.items():
             try:
+		q = status['queue']
                 self._logging.info("push: %s.apply_async(args=%s, queue=%s)", func, arg, q)
-                res = func.apply_async(args=arg, queue=q, expires=3600*24, retry=True, retry_policy={
+                res = func.apply_async(args=arg, queue=q, expires=DOWNLOAD_TASK_EXPIRES_TIME, retry=True,
+                                                                     retry_policy={
                                                                                     'max_retries': 3,
                                                                                     'interval_start': 5,
                                                                                     'interval_step': 1,
@@ -203,7 +259,19 @@ class EventHandler(pyinotify.ProcessEvent):
             except Exception as e:
                 self._logging.errno("Exception occur while doing: %s(arg=%s, queue=%s), except: %s  ",
                                                                   func, arg, q, e)
-                
+        #for q in queues:
+        #    try:
+        #        self._logging.info("push: %s.apply_async(args=%s, queue=%s)", func, arg, q)
+        #        res = func.apply_async(args=arg, queue=q, expires=DOWNLOAD_TASK_EXPIRES_TIME, retry=True, retry_policy={
+        #                                                                            'max_retries': 3,
+        #                                                                            'interval_start': 5,
+        #                                                                            'interval_step': 1,
+        #                                                                            'interval_max': 100,}
+        #                               ) 
+        #        self._logging.info("taskid: %s", res.id)
+        #    except Exception as e:
+        #        self._logging.errno("Exception occur while doing: %s(arg=%s, queue=%s), except: %s  ",
+        #                                                          func, arg, q, e)
 
         #for q in queues:
             #print "queue: %s" % (q)
@@ -216,11 +284,6 @@ class EventHandler(pyinotify.ProcessEvent):
         #    print "taskid: %s" % (res.id)
         #except Exception, e:
         #    print e            
-
-
-#monitorpath = '/var/www/test'
-#wwwroot = '/var/www'
-#httphostname = 'http://192.168.5.60'
 
 
 if __name__ == '__main__':
