@@ -25,7 +25,8 @@ from os import errno
 
 from visitdir import visitdir
 
-from config import dstwwwroot, dstmonitorpath, dstdir, MAX_RETRY_TIMES, worker_broker, worker_backend, special_exts
+from config import dstwwwroot, dstmonitorpath, dstdir, MAX_RETRY_TIMES, worker_broker, worker_backend
+from config import special_exts, exclude_exts
 
 from utils.threadpool import ThreadPool
 
@@ -279,7 +280,7 @@ def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):
 
 @periodic_task(run_every=crontab(hour='*', minute='*/1'))
 def every_monday_morning():
-    print("This is run every Monday morning at 7:30")
+    logger.info("This is run every Monday morning at 7:30")
     
 if __name__ == "__main__":
     download("http://www.blog.pythonlibrary.org/wp-content/uploads/2012/06/wxDbViewer.zip")    
