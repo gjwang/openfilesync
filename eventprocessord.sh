@@ -24,5 +24,11 @@ case "$1" in
                 startup
                 ;;
 
+        *)
+                echo "usage: start | stop | restart"
+                exit 1
+                ;;
+
 esac
 exit
+
