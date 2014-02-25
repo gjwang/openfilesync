@@ -197,6 +197,17 @@ def rmfile(url, localfilename = None):
         try:
             os.remove(localname)
             logger.info("rmfile: %s ok", localname)
+
+            #rm empty dir, avoid empty 'holes'
+            try:
+                os.removedirs(dirname(localname))
+            except OSError as ex:
+                if ex.errno == errno.ENOTEMPTY:
+                    pass
+                else:
+                    logger.error('rm dir failed: %s', dirname(localname))
+                    return 'rm dir failed: %s' % dirname(localname)
+
             return 'OK'            
         except OSError as ex:
             logger.error("rmfile: %s failed: %s", localname, ex)
@@ -225,11 +236,11 @@ def fsrename(src, dst):
 
 @task(default_retry_delay=10, max_retries=0)
 #@periodic_task(run_every=crontab(hour='*', minute='*/1', day_of_week='*'))
-def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):    
+def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):
     dstdirs, dstfiles = visitdir(dstmonitorpath, dstwwwroot)
 
     downloadfiles = set(srcfiles) - set(dstfiles)
-    rmdirs = set(dstdirs) - set(srcdirs)
+    #rmdirs = set(dstdirs) - set(srcdirs)
     rmfiles = set(dstfiles) - set(srcfiles)
 
     logger.warn("rmfiles count=%s", len(rmfiles))
@@ -248,11 +259,11 @@ def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):
         logger.info('Going to rm file: %s, src_filesize(%s) =? local_filesize(%s)', file, sz)
         rmfile(None, file)
 
-    logger.warn("rmdirs count=%s", len(rmdirs))
-    for d in rmdirs:
-        dir = join(dstdir, d)
-        logger.info('Going to rm dir: %s', dir)
-        rmemptydir(None, dir)
+    #logger.warn("rmdirs count=%s", len(rmdirs))
+    #for d in rmdirs:
+    #    dir = join(dstdir, d)
+    #    logger.info('Going to rm dir: %s', dir)
+    #    rmemptydir(None, dir)
 
     failed_downloads = []
     
