@@ -22,7 +22,11 @@ import threading
 from threading import Condition, Lock
 
 from celeryfilesync.visitdir import visitdir
-from config import monitorpath, wwwroot, httphostname, broker, backend, exclude_exts
+#from config import monitorpath, wwwroot, httphostname, broker, backend, exclude_exts
+from distribute_config import monitorpath, wwwroot, httphostname, broker, backend, exclude_exts, hash_num, hash_config 
+
+import hashlib
+from urlparse import urlsplit
 
 INSPECT_TIMEOUT = 10
 CHECK_ACTIVE_QUEUE_TIME = 30 #seconds
@@ -95,27 +99,36 @@ class EventHandler(pyinotify.ProcessEvent):
 
 
     def checkaliveworker(self):
-        #self._tmp_workers = {}
-
         self.active_queues = self.inspecter.active_queues() or {}
 	time_now = int(time.time())
 
 	dirslist = None
         fileslist = None
+        workers_args = {}
         for worker in self.active_queues:
             queue0 = self.active_queues[worker][0]
-            #self._tmp_workers[worker] = queue0['name']
-
             status = self.workers_status.get(worker)
             if status is None:
 		status = {}
                 status['queue'] = queue0['name']
                 status['last_whole_sync_time'] = 0
                 self.workers_status[worker] = status
+
                 try:
                     if dirslist is None:
 		        dirslist, fileslist = visitdir(monitorpath, wwwroot, exclude_exts)
-		    res = download_list.apply_async(args=(dirslist, fileslist, httphostname),
+
+                        for f in fileslist:
+                            if not f.startswith('/')
+                                f = join('/', f)
+                            hs_code = int(hashlib.md5(f).hexdigest()[0:4], 16)/hash_num
+                            self._logging.info('hash_code=%d, url=%s', hs_code, f)
+                            worker = hash_config.get(hs_code)
+                            if workers_args.get(worker) is None:
+                                workers_args[worker] = []
+                            workers_args[worker].append(f)
+                        
+		    res = download_list.apply_async(args=([], workers_args[workers], httphostname),
 					 queue=status['queue'], expires=WHOLE_SYNC_TASK_EXPIRES_TIME, retry=False)
                     status['last_whole_sync_time'] = time_now
                     self._logging.info("worker: %s, new online, whole_sync taskid: %s", worker, res.id)
@@ -137,32 +150,7 @@ class EventHandler(pyinotify.ProcessEvent):
 
 	self._logging.info('workers status: %s\n', self.workers_status)
 
-        #tmp_set = set(self._tmp_workers.iteritems())
-        #worker_set = set(self.workers_online.iteritems())
-        #diffset = tmp_set ^ worker_set
-        #if len(diffset) != 0:
-        #    self._condition.acquire()
-        #    try:
-        #        self.workers_online = copy.deepcopy(self._tmp_workers)
-        #    finally:
-        #        self._condition.release()
-
-        #    diffset = tmp_set - worker_set
-        #    if len(diffset):
-        #        self._logging.info("workers %s new online", diffset)                
-
-        #    diffset = worker_set - tmp_set
-        #    if len(diffset):
-        #        self._logging.info("workers %s offline", diffset)
-
-        #    self._logging.info("workersonline: %s",self.workers_online)
-
     def process_IN_CREATE(self, event):
-        #print "event:", str(event)
-        #self._logging.info("event: %s", str(event))
-        #print "type event:", type(event)
-        #print "event: %s" % pformat(event)
-
         if event.dir == True:
             relativepath = event.pathname[self.monpath_length:]
             self._logging.info("Creating folder: \'%s\', relativepath %s", event.pathname, relativepath)
@@ -172,20 +160,16 @@ class EventHandler(pyinotify.ProcessEvent):
 
         
     def process_IN_DELETE(self, event):
-        #print "event:", str(event)
-        #print "Removing:", event.pathname
-        #self._logging.info("Removing: %s", event.pathname)
-
         url = self.mergeurl(event.pathname)
-        #print url
 
         if event.dir == True:
             self._logging.info("remove folder: %s", event.pathname)
-            self.notifyworker(rmemptydir, (url, None))
+            #self.notifyworker(rmemptydir, (url, None))
+            self.distrib_worker(url, rmemptydir, (url, None))
         else:
             self._logging.info("remove file: %s", event.pathname)
-            self.notifyworker(rmfile, (url, None))
-
+            #self.notifyworker(rmfile, (url, None))
+            self.distrib_worker(url, rmfile, (url, None))
 
     def process_IN_CLOSE_WRITE(self, event):
         #url = 'http://192.168.5.60/cctv/tencent.mp4'
@@ -200,50 +184,56 @@ class EventHandler(pyinotify.ProcessEvent):
         self._logging.info("Closewrite: %s, push: url: %s", event.pathname, url)
 	try:
 	    filesz = getsize(event.pathname)
-            self.notifyworker(download, (url, filesz, None) )
+            #self.notifyworker(download, (url, filesz, None) )
+            self.distrib_worker(url, download, (url, filesz, None) )
 	except Exception as exc:
 	    self._logging.error("%s", exc)
             
  
     def process_IN_ISDIR(self, event):
-        #print "isdir:", event.pathname
         pass
 
     def process_IN_MOVED_FROM(self, event):
-        #print "movefrom:", event.pathname
-        #print "event:", str(event)
-
         self._logging.info("movefrom: %s", event.pathname)
-        #self._logging.info("event: %s", str(event))
 
     def process_IN_MOVED_TO(self, event):
-        #print "moveto:", event.pathname
-        #print "event:", str(event)
         self._logging.info("moveto: %s", event.pathname)
-        #self._logging.info("event: %s", str(event))
-        #url = self.mergeurl(event.pathname)
-
-        #bug: after rename dir, the event.pathname remain the stll
-        #if hasattr(event, 'src_pathname'):
-        #    print "move from src path:", event.src_pathname, event.pathname
-        #    self.notifyworker(fsrename, (event.src_pathname[self.monpath_length:], event.pathname[self.monpath_length:]))
-        #else:
-        #    self.notifyworker(rmfile, (url, None))            
 
     def mergeurl(self, pathname):
         url = os.path.join(self.hostname, pathname[self.monpath_length:].replace('\\', '/'))
         return url
 
-    def notifyworker(self, func, arg = ()):
-        #TODO: use broadcast to notify all hosts
-        #results = []
-        #tasks = []
-        #self._condition.acquire()
-        #try:            
-        #    queues = self.workers_online.values()
-        #finally:
-        #    self._condition.release()
+    def hash_code(self, url):
+        path = urlsplit(url).path
+        return int(hashlib.md5(path).hexdigest()[0:4], 16)/hash_num
 
+    def distrib_worker(self, url, func, args = ()):
+        hs_code = hash_code(url)
+        self._logging.info('hash_code=%d, url=%s', hs_code, url)
+
+        workers = hash_config.get(hs_code)
+        for worker in workers:
+            status = self.workers_status.get(worker)
+            if status:
+                self.async_notifywoker(q=status['queue'], func=func, args=args)
+            else:
+                self._logging.info("worker:%s not in workersonline list", worker)
+
+    def async_notifywoker(self, q, func, args = ()):
+        try:
+            self._logging.info("push: %s.apply_async(args=%s, queue=%s)", func, arg, q)
+            res = func.apply_async(args=args, queue=q, expires=DOWNLOAD_TASK_EXPIRES_TIME, retry=True,
+                                                                     retry_policy={
+                                                                                    'max_retries': 3,
+                                                                                    'interval_start': 5,
+                                                                                    'interval_step': 1,
+                                                                                    'interval_max': 100,}
+                                  )
+            self._logging.info("taskid: %s", res.id)
+        except Exception as e:
+            self._logging.errno("async_notifywoker(queue=%s, func=%s), exception: %s  ", q, func, e)
+
+    def notifyworker(self, func, arg = ()):
         for worker, status in self.workers_status.items():
             try:
 		q = status['queue']
@@ -259,31 +249,6 @@ class EventHandler(pyinotify.ProcessEvent):
             except Exception as e:
                 self._logging.errno("Exception occur while doing: %s(arg=%s, queue=%s), except: %s  ",
                                                                   func, arg, q, e)
-        #for q in queues:
-        #    try:
-        #        self._logging.info("push: %s.apply_async(args=%s, queue=%s)", func, arg, q)
-        #        res = func.apply_async(args=arg, queue=q, expires=DOWNLOAD_TASK_EXPIRES_TIME, retry=True, retry_policy={
-        #                                                                            'max_retries': 3,
-        #                                                                            'interval_start': 5,
-        #                                                                            'interval_step': 1,
-        #                                                                            'interval_max': 100,}
-        #                               ) 
-        #        self._logging.info("taskid: %s", res.id)
-        #    except Exception as e:
-        #        self._logging.errno("Exception occur while doing: %s(arg=%s, queue=%s), except: %s  ",
-        #                                                          func, arg, q, e)
-
-        #for q in queues:
-            #print "queue: %s" % (q)
-        #    tasks.append(func.subtask(args=arg, options={'queue':q}))
-        #job = TaskSet(tasks)
-
-        #try:
-        #    res = job.apply_async()
-            #results.append(res)
-        #    print "taskid: %s" % (res.id)
-        #except Exception, e:
-        #    print e            
 
 
 if __name__ == '__main__':
