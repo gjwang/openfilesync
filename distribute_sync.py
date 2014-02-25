@@ -11,7 +11,7 @@ import celery
 from celery import current_app
 from celery.task.sets import TaskSet
 from celery import group
-from celeryfilesync.tasks import add, sendMsg, download, download_list, rmfile, mkemptydir, rmemptydir, fsrename
+from celeryfilesync.tasks import download, download_list, rmfile, mkemptydir, rmemptydir, fsrename
 
 import pyinotify
 from apscheduler.scheduler import Scheduler
@@ -23,7 +23,7 @@ from threading import Condition, Lock
 
 from celeryfilesync.visitdir import visitdir
 #from config import monitorpath, wwwroot, httphostname, broker, backend, exclude_exts
-from distribute_config import monitorpath, wwwroot, httphostname, broker, backend, exclude_exts, hash_num, hash_config 
+from config_distribute import monitorpath, wwwroot, httphostname, broker, backend, exclude_exts, hash_num, hash_config 
 
 import hashlib
 from urlparse import urlsplit
@@ -58,8 +58,7 @@ class EventHandler(pyinotify.ProcessEvent):
         self.activeQueueThread.start()
 
         self.sched = Scheduler()
-        self.sched.add_cron_job(self.all_workers_do_whole_sync , day_of_week='*', hour=2, minute=0,second=0)
-        #self.sched.add_cron_job(self.all_workers_do_whole_sync , day_of_week='*', second='*/30')
+        self.sched.add_cron_job(self.all_workers_do_whole_sync , day_of_week='*', hour='*/3', minute=0, second=0)
         self.sched.start()
 
     def all_workers_do_whole_sync(self):
@@ -76,7 +75,6 @@ class EventHandler(pyinotify.ProcessEvent):
                                          queue=status['queue'], expires=WHOLE_SYNC_TASK_EXPIRES_TIME, retry=False)
 		status['last_whole_sync_time'] = now_time
                 self._logging.info("cron job: worker=%s, whole_sync taskid: %s", worker, res.id)
-                #status['whole_sync_task_ids'].append(res.id)
             except Exception as e:
                 self._logging.error('get whole_sync taskid exception: %s', e)	
 
@@ -118,23 +116,24 @@ class EventHandler(pyinotify.ProcessEvent):
                     if dirslist is None:
 		        dirslist, fileslist = visitdir(monitorpath, wwwroot, exclude_exts)
 
-                        for f in fileslist:
-                            if not f.startswith('/')
-                                f = join('/', f)
-                            hs_code = int(hashlib.md5(f).hexdigest()[0:4], 16)/hash_num
-                            self._logging.info('hash_code=%d, url=%s', hs_code, f)
+                        for f_sz in fileslist:
+                            fl = f_sz[0] 
+                            if not fl.startswith('/'):
+                                fl = join('/', fl)
+                            hs_code = int(hashlib.md5(fl).hexdigest()[0:4], 16)%hash_num
                             workers = hash_config.get(hs_code)
+                            self._logging.info('hash_code=%d, workers:%s, filepath=%s', hs_code, workers, fl)
                             for w in workers:
                                 if workers_args.get(w) is None:
                                     workers_args[w] = []
-                                workers_args[w].append(f)
-                        
+                                workers_args[w].append(f_sz)
+
 		    res = download_list.apply_async(args=([], workers_args[workers], httphostname),
-					 queue=status['queue'], expires=WHOLE_SYNC_TASK_EXPIRES_TIME, retry=False)
+		    			 queue=status['queue'], expires=WHOLE_SYNC_TASK_EXPIRES_TIME, retry=False)
                     status['last_whole_sync_time'] = time_now
                     self._logging.info("worker: %s, new online, whole_sync taskid: %s", worker, res.id)
                 except Exception as e:
-                    self._logging.error('get whole_sync taskid exception: %s', e)
+                    self._logging.error('do whole_sync exception: %s', e)
 
             status['last_online_time'] = time_now
 
@@ -253,7 +252,7 @@ class EventHandler(pyinotify.ProcessEvent):
 
 if __name__ == '__main__':
     formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
-    log_FileHandler = logging.handlers.TimedRotatingFileHandler(filename = "log/eventprocessor.log",
+    log_FileHandler = logging.handlers.TimedRotatingFileHandler(filename = "log/distribute_sync_client.log",
                                                                 when = 'midnight',
                                                                 interval = 1,
                                                                 backupCount = 7)
