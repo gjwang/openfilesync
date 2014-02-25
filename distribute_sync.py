@@ -162,9 +162,10 @@ class EventHandler(pyinotify.ProcessEvent):
         url = self.mergeurl(event.pathname)
 
         if event.dir == True:
-            self._logging.info("remove folder: %s", event.pathname)
+            #self._logging.info("remove folder: %s", event.pathname)
             #self.notifyworker(rmemptydir, (url, None))
-            self.distrib_worker(url, rmemptydir, (url, None))
+            #self.distrib_worker(url, rmemptydir, (url, None))
+            pass
         else:
             self._logging.info("remove file: %s", event.pathname)
             #self.notifyworker(rmfile, (url, None))
