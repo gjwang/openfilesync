@@ -233,9 +233,19 @@ def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):
     rmfiles = set(dstfiles) - set(srcfiles)
 
     logger.warn("rmfiles count=%s", len(rmfiles))
-    for f, _ in rmfiles:
+    for f, sz in rmfiles:
         file = join(dstdir, f)
-        logger.info('Going to rm file: %s', file)
+        localfilesz = None
+	if os.path.exists(file): 
+	    localfilesz = getsize(file)
+
+	if (f, sz) in downloadfiles:
+	    logger.info('file:%s, suggest_size:%s, local_size:%s is in download list, skip', f, localfilesz, sz)
+            continue
+        
+        #TODO: if file is in remote server, skip
+
+        logger.info('Going to rm file: %s, src_filesize(%s) =? local_filesize(%s)', file, sz)
         rmfile(None, file)
 
     logger.warn("rmdirs count=%s", len(rmdirs))
