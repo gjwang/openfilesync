@@ -3,18 +3,18 @@ exclude_exts=['.swx', '.swp', '.txt~', '.tmp', '.svn']
 
 
 #source/client configue
-wwwroot = '/data/ysten'
+wwwroot = '/data/www'
 monitorpath = wwwroot
-httphostname = 'http://223.82.137.215'
-broker = "redis://223.82.137.215:6379//"
-backend = "redis://223.82.137.215:6379//"
+httphostname = 'http://192.168.5.60'
+broker = "redis://192.168.5.60:6379//"
+backend = "redis://192.168.5.60:6379//"
 
 
 #dest/worker configure
-worker_broker = "redis://223.82.137.215:6379//"
-worker_backend = "redis://223.82.137.215:6379//"
+worker_broker = "redis://192.168.5.60:6379//"
+worker_backend = "redis://192.168.5.60:6379//"
 
-dstdir = '/data/ysten'
+dstdir = '/home/wgj/backup'
 dstwwwroot = dstdir
 dstmonitorpath = dstwwwroot
 
