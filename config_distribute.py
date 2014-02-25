@@ -3,24 +3,27 @@ exclude_exts=['.swx', '.swp', '.txt~', '.tmp', '.svn']
 
 
 #source/client configue
-wwwroot = '/data/ysten'
+wwwroot = '/data/www'
 monitorpath = wwwroot
-httphostname = 'http://223.82.137.215'
-broker = "redis://223.82.137.215:6379//"
-backend = "redis://223.82.137.215:6379//"
+httphostname = 'http://192.168.5.60'
+broker = "redis://192.168.5.60:6379//"
+backend = "redis://192.168.5.60:6379//"
 
 
-hash_num = 8
-hash_config = {
-#multity to multiy relationship
-#hash_code : node array
-    0: ['192.168.0.1', '192.168.0.2'],
-    1: ['192.168.0.1', '192.168.0.2'],
-    2: ['192.168.0.3', '192.168.0.4'],
-    3: ['192.168.0.3', '192.168.0.4'],
-    4: ['192.168.0.5', '192.168.0.6'],
-    5: ['192.168.0.5', '192.168.0.6'],
-    6: ['192.168.0.7', '192.168.0.8'],
-    7: ['192.168.0.7', '192.168.0.8'],
-}
+#dest/worker configure
+worker_broker = "redis://192.168.5.60:6379//"
+worker_backend = "redis://192.168.5.60:6379//"
 
+dstdir = '/home/wgj/backup'
+dstwwwroot = dstdir
+dstmonitorpath = dstwwwroot
+
+#file in special_exts download it anyway
+special_exts=['.m3u8']
+
+#thread num while doing whole sync
+HANDLER_THREAD_COUNT = 8
+TASK_QUEUE_MAX_SIZE = 30240
+
+#use 2**retry_times backoff methon, don't retry too much times unless you kwow what you are doing
+MAX_RETRY_TIMES = 7
