@@ -123,16 +123,16 @@ class EventHandler(pyinotify.ProcessEvent):
                                 f = join('/', f)
                             hs_code = int(hashlib.md5(f).hexdigest()[0:4], 16)/hash_num
                             self._logging.info('hash_code=%d, url=%s', hs_code, f)
-                            worker = hash_config.get(hs_code)
-                            if workers_args.get(worker) is None:
-                                workers_args[worker] = []
-                            workers_args[worker].append(f)
+                            workers = hash_config.get(hs_code)
+                            for w in workers:
+                                if workers_args.get(w) is None:
+                                    workers_args[w] = []
+                                workers_args[w].append(f)
                         
 		    res = download_list.apply_async(args=([], workers_args[workers], httphostname),
 					 queue=status['queue'], expires=WHOLE_SYNC_TASK_EXPIRES_TIME, retry=False)
                     status['last_whole_sync_time'] = time_now
                     self._logging.info("worker: %s, new online, whole_sync taskid: %s", worker, res.id)
-                    #status['whole_sync_task_ids'].append(res.id)
                 except Exception as e:
                     self._logging.error('get whole_sync taskid exception: %s', e)
 
