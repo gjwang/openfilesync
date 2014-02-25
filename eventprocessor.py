@@ -11,7 +11,7 @@ import celery
 from celery import current_app
 from celery.task.sets import TaskSet
 from celery import group
-from celeryfilesync.tasks import add, sendMsg, download, download_list, rmfile, mkemptydir, rmemptydir, fsrename
+from celeryfilesync.tasks import download, download_list, rmfile, mkemptydir, rmemptydir, fsrename
 
 import pyinotify
 from apscheduler.scheduler import Scheduler
@@ -25,22 +25,23 @@ from celeryfilesync.visitdir import visitdir
 from config import monitorpath, wwwroot, httphostname, broker, backend, exclude_exts
 
 INSPECT_TIMEOUT = 10
-CHECK_ACTIVE_QUEUE_TIME = 30 #seconds
-MAX_OFFLINE_TIME =  60*30    #seconds
-WHOLE_SYNC_TASK_EXPIRES_TIME = MAX_OFFLINE_TIME
+CHECK_ACTIVE_QUEUE_TIME = 60  #seconds
+MAX_OFFLINE_TIME =  3600*1    #seconds
+WHOLE_SYNC_TASK_EXPIRES_TIME = MAX_OFFLINE_TIME/2
 DOWNLOAD_TASK_EXPIRES_TIME = 3600*24 
 
 class EventHandler(pyinotify.ProcessEvent):
     def __init__(self, app, monitorpath = '/data/', hostname = 'http://127.0.0.1'):
         self._logging = logging.getLogger(self.__class__.__name__)
-        self.app = app
-        self.monitorpath = monitorpath
 
+        self.app = app
+	app.control.rate_limit('celeryfilesync.tasks.download_list', '1/h')
+
+        self.monitorpath = monitorpath
         if self.monitorpath.endswith('/') or self.monitorpath.endswith('\\'):
             self.monpath_length = len(self.monitorpath)
         else:
             self.monpath_length = len(self.monitorpath) + 1
-
 
         self.hostname = hostname
         self.inspecter = app.control.inspect(timeout=INSPECT_TIMEOUT)
@@ -54,8 +55,7 @@ class EventHandler(pyinotify.ProcessEvent):
         self.activeQueueThread.start()
 
         self.sched = Scheduler()
-        self.sched.add_cron_job(self.all_workers_do_whole_sync , day_of_week='*', hour=2, minute=0,second=0)
-        #self.sched.add_cron_job(self.all_workers_do_whole_sync , day_of_week='*', second='*/30')
+        self.sched.add_cron_job(self.all_workers_do_whole_sync , day_of_week='*', hour='*/3', minute=0, second=0)
         self.sched.start()
 
     def all_workers_do_whole_sync(self):
