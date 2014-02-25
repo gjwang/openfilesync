@@ -19,11 +19,11 @@ from celery.events.state import Worker
 from celeryfilesync.visitdir import visitdir
 from celeryfilesync.tasks import add, sendMsg, download, download_list
 
-from config import monitorpath, wwwroot, httphostname, exclude_exts, broker
+from config import monitorpath, wwwroot, httphostname, exclude_exts, exclude_exts, broker
 
 WHOLE_SYNC_INTERVAL = 60*30
 
-timeout = 2000 / 1000.0
+timeout = 10
 
 def my_monitor(app):
     _logging = logging.getLogger()
@@ -38,7 +38,7 @@ def my_monitor(app):
 
     workers_offlinetime = {}
     workers_status = {}#'workername':{'is_online':True, 'last_online_time': 138, 'last_whole_sync_time': 138, 
-                       #'whole_sync_task_ids'['', '']  }
+                       #'offline_time':'', 'whole_sync_task_ids'['', '']  }
 
 
     def get_worker_queue():
@@ -54,6 +54,7 @@ def my_monitor(app):
                 worker_st['queue'] = queue0['name']
                 worker_st['is_online'] = True
                 worker_st['last_online_time'] = time.time()
+		worker_st['offline_time'] = None
                 worker_st['last_whole_sync_time'] = 0
                 worker_st['whole_sync_task_ids'] = []
                 workers_status[worker] = worker_st
@@ -158,6 +159,7 @@ def my_monitor(app):
         worker_st = workers_status.get(hostname)
         if worker_st is not None:
             worker_st['is_online'] = False
+            worker_st['offline_time'] = time.time()
 
     def announce_dead_workers(event):
         hostname = event['hostname']
