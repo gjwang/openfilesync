@@ -5,7 +5,7 @@ import time
 import logging
 #import traceback
 import Queue, threading
-#from threading import Condition, Lock
+from threading import Condition, Lock
 from threading import Thread
 from config_worker import HANDLER_THREAD_COUNT, TASK_QUEUE_MAX_SIZE
 

@@ -72,9 +72,8 @@ class EventHandler(pyinotify.ProcessEvent):
                                          queue=status['queue'], expires=WHOLE_SYNC_TASK_EXPIRES_TIME, retry=False)
 		status['last_whole_sync_time'] = now_time
                 self._logging.info("cron job: worker=%s, whole_sync taskid: %s", worker, res.id)
-                #status['whole_sync_task_ids'].append(res.id)
             except Exception as e:
-                self._logging.error('get whole_sync taskid exception: %s', e)	
+                self._logging.error('all_workers_do_whole_sync exception: %s', e)	
 
     class CheckActivQueueThread(threading.Thread):
         def __init__(self, func):
@@ -257,7 +256,7 @@ class EventHandler(pyinotify.ProcessEvent):
                                        ) 
                 self._logging.info("taskid: %s", res.id)
             except Exception as e:
-                self._logging.errno("Exception occur while doing: %s(arg=%s, queue=%s), except: %s  ",
+                self._logging.error("Exception occur while doing: %s(arg=%s, queue=%s), except: %s  ",
                                                                   func, arg, q, e)
         #for q in queues:
         #    try:
@@ -270,7 +269,7 @@ class EventHandler(pyinotify.ProcessEvent):
         #                               ) 
         #        self._logging.info("taskid: %s", res.id)
         #    except Exception as e:
-        #        self._logging.errno("Exception occur while doing: %s(arg=%s, queue=%s), except: %s  ",
+        #        self._logging.error("Exception occur while doing: %s(arg=%s, queue=%s), except: %s  ",
         #                                                          func, arg, q, e)
 
         #for q in queues:
