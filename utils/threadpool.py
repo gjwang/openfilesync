@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*- 
 #
+
 import time
 import logging
 #import traceback
 import Queue, threading
-from threading import Condition, Lock
+#from threading import Condition, Lock
 from threading import Thread
-from config import HANDLER_THREAD_COUNT, TASK_QUEUE_MAX_SIZE
+from config_worker import HANDLER_THREAD_COUNT, TASK_QUEUE_MAX_SIZE
 
 MAX_RETRIES_FAILED_TASK = 4
 
