@@ -64,6 +64,10 @@ class EventHandler(pyinotify.ProcessEvent):
     def all_workers_do_whole_sync(self):
         dirslist, fileslist = visitdir(monitorpath, wwwroot, exclude_exts)
 	now_time = int(time.time())
+
+        fileslist = None
+        workers_args = {}
+
         for worker, status in self.workers_status.items():
 	    if now_time - status['last_whole_sync_time'] < WHOLE_SYNC_TASK_EXPIRES_TIME:
 	        self._logging.info("worker:%s do whole_sync too frequent(%s seconds), skip this time",
@@ -71,12 +75,31 @@ class EventHandler(pyinotify.ProcessEvent):
 		continue
 
             try:
-                res = download_list.apply_async(args=(dirslist, fileslist, httphostname),
-                                         queue=status['queue'], expires=WHOLE_SYNC_TASK_EXPIRES_TIME, retry=False)
-		status['last_whole_sync_time'] = now_time
-                self._logging.info("cron job: worker=%s, whole_sync taskid: %s", worker, res.id)
+            	if fileslist is None:
+                    dirslist, fileslist = visitdir(monitorpath, wwwroot, exclude_exts)
+
+                    for f_sz in fileslist:
+                    	fl = f_sz[0]
+                        if not fl.startswith('/'):
+                            fl = join('/', fl)
+                        hs_code = int(hashlib.md5(fl).hexdigest()[0:4], 16)%hash_num
+                        workers = hash_config.get(hs_code) or []
+                        self._logging.debug('hash_code=%d, workers:%s, filepath=%s', hs_code, workers, fl)
+                        for w in workers:
+                            if workers_args.get(w) is None:
+                                workers_args[w] = []
+                            workers_args[w].append(f_sz)
+
+                args = workers_args.get(worker)
+                if args:
+                    res = download_list.apply_async(args=([], workers_args[workers], httphostname),
+                                          queue=status['queue'], expires=WHOLE_SYNC_TASK_EXPIRES_TIME, retry=False)
+                    status['last_whole_sync_time'] = time_now
+                    self._logging.info("cron job: worker=%s, whole_sync taskid: %s", worker, res.id)
+                else:
+                    self._logging.info("cron job: worker=%s, whole_sync is not in config_hash", worker)
             except Exception as e:
-                self._logging.error('get whole_sync taskid exception: %s', e)	
+                self._logging.error('all_workers_do_whole_sync exception: %s', e)	
 
     class CheckActivQueueThread(threading.Thread):
         def __init__(self, func):
