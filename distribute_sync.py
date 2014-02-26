@@ -121,17 +121,22 @@ class EventHandler(pyinotify.ProcessEvent):
                             if not fl.startswith('/'):
                                 fl = join('/', fl)
                             hs_code = int(hashlib.md5(fl).hexdigest()[0:4], 16)%hash_num
-                            workers = hash_config.get(hs_code)
-                            self._logging.info('hash_code=%d, workers:%s, filepath=%s', hs_code, workers, fl)
+                            workers = hash_config.get(hs_code) or []
+                            self._logging.debug('hash_code=%d, workers:%s, filepath=%s', hs_code, workers, fl)
                             for w in workers:
                                 if workers_args.get(w) is None:
                                     workers_args[w] = []
                                 workers_args[w].append(f_sz)
 
-		    res = download_list.apply_async(args=([], workers_args[workers], httphostname),
-		    			 queue=status['queue'], expires=WHOLE_SYNC_TASK_EXPIRES_TIME, retry=False)
-                    status['last_whole_sync_time'] = time_now
-                    self._logging.info("worker: %s, new online, whole_sync taskid: %s", worker, res.id)
+                    args = workers_args.get(worker)
+		    if args:
+		        res = download_list.apply_async(args=([], workers_args[workers], httphostname),
+		    			     queue=status['queue'], expires=WHOLE_SYNC_TASK_EXPIRES_TIME, retry=False)
+                        status['last_whole_sync_time'] = time_now
+                        self._logging.info("worker: %s, new online, whole_sync taskid: %s", worker, res.id)
+		    else:
+                        self._logging.error("whole_sync: worker=%s is not in hash_config", worker)
+
                 except Exception as e:
                     self._logging.error('do whole_sync exception: %s', e)
 
@@ -205,13 +210,13 @@ class EventHandler(pyinotify.ProcessEvent):
 
     def hash_code(self, url):
         path = urlsplit(url).path
-        return int(hashlib.md5(path).hexdigest()[0:4], 16)/hash_num
+        return int(hashlib.md5(path).hexdigest()[0:4], 16)%hash_num
 
     def distrib_worker(self, url, func, args = ()):
         hs_code = self.hash_code(url)
         self._logging.info('hash_code=%d, url=%s', hs_code, url)
 
-        workers = hash_config.get(hs_code)
+        workers = hash_config.get(hs_code) or []
         for worker in workers:
             status = self.workers_status.get(worker)
             if status:
@@ -249,9 +254,14 @@ class EventHandler(pyinotify.ProcessEvent):
             except Exception as e:
                 self._logging.errno("Exception occur while doing: %s(arg=%s, queue=%s), except: %s  ",
                                                                   func, arg, q, e)
-
+def check_runtime_env():
+    if hash_num != len(hash_config):
+        print 'hash_num=%s not equals len(hash_config)=%s. exited!!!!'%(hash_num, len(hash_config))
+        exit(0)
 
 if __name__ == '__main__':
+    check_runtime_env()
+
     formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
     log_FileHandler = logging.handlers.TimedRotatingFileHandler(filename = "log/distribute_sync_client.log",
                                                                 when = 'midnight',
