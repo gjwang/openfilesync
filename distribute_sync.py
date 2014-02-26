@@ -208,7 +208,7 @@ class EventHandler(pyinotify.ProcessEvent):
         return int(hashlib.md5(path).hexdigest()[0:4], 16)/hash_num
 
     def distrib_worker(self, url, func, args = ()):
-        hs_code = hash_code(url)
+        hs_code = self.hash_code(url)
         self._logging.info('hash_code=%d, url=%s', hs_code, url)
 
         workers = hash_config.get(hs_code)
