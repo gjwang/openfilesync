@@ -25,8 +25,8 @@ from os import errno
 
 from visitdir import visitdir
 
-from config import dstwwwroot, dstmonitorpath, dstdir, MAX_RETRY_TIMES, worker_broker, worker_backend
-from config import special_exts, exclude_exts
+from config_worker import dstwwwroot, dstmonitorpath, dstdir, MAX_RETRY_TIMES, worker_broker, worker_backend
+from config_worker import special_exts, exclude_exts
 
 from utils.threadpool import ThreadPool
 
