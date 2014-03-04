@@ -256,7 +256,7 @@ def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):
         
         #TODO: if file is in remote server, skip
 
-        logger.info('Going to rm file: %s, src_filesize(%s) =? local_filesize(%s)', file, sz)
+        logger.info('Going to rm file: %s, src_filesize(%s) =? local_filesize(%s)', file, sz, localfilesz)
         rmfile(None, file)
 
     #logger.warn("rmdirs count=%s", len(rmdirs))
