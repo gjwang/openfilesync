@@ -276,18 +276,20 @@ def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):
         #    failed_downloads.append((f, filesize))
             #current.retry(exc=exc)
 
-    logger.warn("download tasks count = %s", len(downloadfiles))
+    download_count = len(downloadfiles)
+    logger.warn("download tasks count = %s", download_count)
 
-    ThreadPool.initialize()
-    for (f, filesize) in downloadfiles:
-        url = join(hostname, f)
-        ThreadPool.add_task_with_param(download, url)
-    ThreadPool.wait_for_complete(timeout=3600*10)
+    if download_count > 0:
+        ThreadPool.initialize()
+        for (f, filesize) in downloadfiles:
+            url = join(hostname, f)
+            ThreadPool.add_task_with_param(download, url)
+        ThreadPool.wait_for_complete(timeout=3600*10)
 
-    logger.warn("complete downloads")
+        logger.warn("complete downloads")
     
-    ThreadPool.clear_task()
-    ThreadPool.stop()
+        ThreadPool.clear_task()
+        ThreadPool.stop()
 
     return 'OK'
 
