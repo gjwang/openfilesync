@@ -67,7 +67,8 @@ def download(url, filesize = None, localFileName = None):
             localName = join(dstdir, urlsplit(url).path[1:])
 
         if splitext(localName)[1].lower() in exclude_exts:
-            logger.info("exclude file: %s", localName)  
+            logger.info("exclude file: %s, skip", localName) 
+	    return True 
 
         req = urllib2.Request(url)
         r = urllib2.urlopen(req)
@@ -78,32 +79,31 @@ def download(url, filesize = None, localFileName = None):
 
         filesize = file_len
 
-        if os.path.exists(localName) and getsize(localName) == filesize \
-           and splitext(localName)[1].lower() not in special_exts:
-            logger.info("File \'%s\' existed and filesize(%s) equals", url, filesize)
-        else:
-            dstdirname = dirname(localName)
-            if not os.path.exists(dstdirname):
-                os.makedirs(dstdirname)
-            
-            block_sz = 8192*2
-            f= open(localName, 'wb')
-            #with open(localName, 'wb') as f:
-            if 1:
-                while True:
-                    buffer = r.read(block_sz)
-                    if not buffer:
-                        break
-                    f.write(buffer)
-            f.close()
+        if os.path.exists(localName) and getsize(localName) == filesize and \
+	   splitext(localName)[1].lower() not in special_exts:
+            logger.info("File \'%s\' existed and filesize(%s) equals, skip", url, filesize)
+            r.close()
+	    return True
 
-            sz = getsize(localName)
-            if sz != filesize:
-                logger.error("download %s unfinished: filesz:%s != localfilesz:%s" % (url, filesize, sz))
-                raise Exception("download %s unfinished: filesz:%s != localfilesz:%s" % (url, filesize, sz))
-            logger.info("down: %s to %s OK", url, localName)
+        dstdirname = dirname(localName)
+        if not os.path.exists(dstdirname):
+            os.makedirs(dstdirname)
+            
+        block_sz = 8192*2
+        with open(localName, 'wb') as f:
+            while True:
+                buffer = r.read(block_sz)
+                if not buffer:
+                    break
+                f.write(buffer)
 
         r.close()
+        sz = getsize(localName)
+        if sz != filesize:
+            logger.error("download %s unfinished: filesz:%s != localfilesz:%s" % (url, filesize, sz))
+            raise Exception("download %s unfinished: filesz:%s != localfilesz:%s" % (url, filesize, sz))
+        logger.info("down: %s to %s, filesize=%s, OK", url, localName, sz)
+
         return True 
     except Exception, exc:
         logger.info("down: %s to %s failed: %s", url, localName, exc)
@@ -250,13 +250,13 @@ def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):
 	if os.path.exists(file): 
 	    localfilesz = getsize(file)
 
-	if (f, sz) in downloadfiles:
-	    logger.info('file:%s, suggest_size:%s, local_size:%s is in download list, skip', f, localfilesz, sz)
-            continue
-        
-        #TODO: if file is in remote server, skip
+	for dlf, dlsz in downloadfiles:
+	    if f == dlf:
+                logger.info('file:%s is in download list, suggest_size(%s) =? scan_size(%s), real_size:%s, skip',
+				 f, dlsz, sz, localfilesz)
+                continue
 
-        logger.info('Going to rm file: %s, src_filesize(%s) =? local_filesize(%s)', file, sz, localfilesz)
+        logger.info('Going to rm file: %s, scan_filesize(%s) =? local_filesize(%s)', file, sz, localfilesz)
         rmfile(None, file)
 
     #logger.warn("rmdirs count=%s", len(rmdirs))
