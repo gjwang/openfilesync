@@ -250,14 +250,17 @@ def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):
 	if os.path.exists(file): 
 	    localfilesz = getsize(file)
 
+        is_skip = False
 	for dlf, dlsz in downloadfiles:
 	    if f == dlf:
                 logger.info('file:%s is in download list, suggest_size(%s) =? scan_size(%s), real_size:%s, skip',
 				 f, dlsz, sz, localfilesz)
-                continue
+		is_skip = True
+                break 
 
-        logger.info('Going to rm file: %s, scan_filesize(%s) =? local_filesize(%s)', file, sz, localfilesz)
-        rmfile(None, file)
+        if not is_skip:
+            logger.info('Going to rm file: %s, scan_filesize(%s) =? local_filesize(%s)', file, sz, localfilesz)
+            rmfile(None, file)
 
     #logger.warn("rmdirs count=%s", len(rmdirs))
     #for d in rmdirs:
