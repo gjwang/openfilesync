@@ -248,6 +248,9 @@ def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):
     rmfiles = set(dstfiles) - set(srcfiles)
 
     logger.warn("rmfiles count=%s", len(rmfiles))
+    download_count = len(downloadfiles)
+    logger.warn("download tasks count = %s", download_count)
+
     for f, sz in rmfiles:
         file = join(dstdir, f)
         localfilesz = None
@@ -263,28 +266,8 @@ def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):
                 break 
 
         if not is_skip:
-            logger.info('Going to rm file: %s, scan_filesize(%s) =? local_filesize(%s)', file, sz, localfilesz)
+            logger.info('Going to rm file: %s, filesize=%s', file, localfilesz)
             rmfile(None, file)
-
-    #logger.warn("rmdirs count=%s", len(rmdirs))
-    #for d in rmdirs:
-    #    dir = join(dstdir, d)
-    #    logger.info('Going to rm dir: %s', dir)
-    #    rmemptydir(None, dir)
-
-    failed_downloads = []
-    
-    #for (f, filesize) in downloadfiles:
-        #url = join(hostname, f)
-        #try:
-        #    download(url, filesize, join(dstdir, f))
-        #except Exception, exc:
-        #    logger.error("sync %s failed: %s", url, exc)
-        #    failed_downloads.append((f, filesize))
-            #current.retry(exc=exc)
-
-    download_count = len(downloadfiles)
-    logger.warn("download tasks count = %s", download_count)
 
     if download_count > 0:
         ThreadPool.initialize()
