@@ -136,25 +136,6 @@ class EventHandler(pyinotify.ProcessEvent):
 
 	self._logging.info('workers status: %s\n', self.workers_status)
 
-        #tmp_set = set(self._tmp_workers.iteritems())
-        #worker_set = set(self.workers_online.iteritems())
-        #diffset = tmp_set ^ worker_set
-        #if len(diffset) != 0:
-        #    self._condition.acquire()
-        #    try:
-        #        self.workers_online = copy.deepcopy(self._tmp_workers)
-        #    finally:
-        #        self._condition.release()
-
-        #    diffset = tmp_set - worker_set
-        #    if len(diffset):
-        #        self._logging.info("workers %s new online", diffset)                
-
-        #    diffset = worker_set - tmp_set
-        #    if len(diffset):
-        #        self._logging.info("workers %s offline", diffset)
-
-        #    self._logging.info("workersonline: %s",self.workers_online)
 
     def process_IN_CREATE(self, event):
         #print "event:", str(event)
@@ -171,17 +152,17 @@ class EventHandler(pyinotify.ProcessEvent):
 
         
     def process_IN_DELETE(self, event):
-        #print "event:", str(event)
-        #print "Removing:", event.pathname
         #self._logging.info("Removing: %s", event.pathname)
-
         url = self.mergeurl(event.pathname)
-        #print url
 
         if event.dir == True:
             self._logging.info("remove folder: %s", event.pathname)
             self.notifyworker(rmemptydir, (url, None))
         else:
+            if splitext(event.pathname)[1].lower() in exclude_exts:
+                logger.info("exclude file: %s, skip", event.pathname)
+                return 
+
             self._logging.info("remove file: %s", event.pathname)
             self.notifyworker(rmfile, (url, None))
 

@@ -193,6 +193,10 @@ def rmfile(url, localfilename = None):
     else:
         localname = join(dstdir, urlsplit(url).path[1:])
 
+    if splitext(localname)[1].lower() in exclude_exts:
+        logger.info("exclude file: %s, skip", localname)
+        return True
+
     if os.path.exists(localname):
         try:
             os.remove(localname)
