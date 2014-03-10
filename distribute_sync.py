@@ -202,13 +202,13 @@ class EventHandler(pyinotify.ProcessEvent):
         url = self.mergeurl(event.pathname)
 
         if event.dir == True:
-            #self._logging.info("remove folder: %s", event.pathname)
-            #self.notifyworker(rmemptydir, (url, None))
-            #self.distrib_worker(url, rmemptydir, (url, None))
             pass
         else:
+            if splitext(event.pathname)[1].lower() in exclude_exts:
+                logger.info("exclude file: %s, skip", event.pathname)
+                return
+
             self._logging.info("remove file: %s", event.pathname)
-            #self.notifyworker(rmfile, (url, None))
             self.distrib_worker(url, rmfile, (url, None))
 
     def process_IN_CLOSE_WRITE(self, event):
