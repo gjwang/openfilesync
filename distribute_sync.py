@@ -30,16 +30,18 @@ from config_distribute import monitorpath, wwwroot, httphostname, broker, backen
 import hashlib
 from urlparse import urlsplit
 
-INSPECT_TIMEOUT = 10
-CHECK_ACTIVE_QUEUE_TIME = 30 #seconds
-MAX_OFFLINE_TIME =  60*30    #seconds
-WHOLE_SYNC_TASK_EXPIRES_TIME = MAX_OFFLINE_TIME
+INSPECT_TIMEOUT = 30
+CHECK_ACTIVE_QUEUE_TIME = 60 #seconds
+MAX_OFFLINE_TIME =  3600*4   #seconds
+WHOLE_SYNC_TASK_EXPIRES_TIME = MAX_OFFLINE_TIME/2
 DOWNLOAD_TASK_EXPIRES_TIME = 3600*24 
 
 class EventHandler(pyinotify.ProcessEvent):
     def __init__(self, app, monitorpath = '/data/', hostname = 'http://127.0.0.1'):
         self._logging = logging.getLogger(self.__class__.__name__)
         self.app = app
+        app.control.rate_limit('celeryfilesync.tasks.download_list', '2/h')
+
         self.monitorpath = monitorpath
 
         if self.monitorpath.endswith('/') or self.monitorpath.endswith('\\'):
