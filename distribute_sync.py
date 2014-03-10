@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 '''
 Created on 2013-8-6
 
@@ -62,7 +64,7 @@ class EventHandler(pyinotify.ProcessEvent):
         self.sched.start()
 
     def all_workers_do_whole_sync(self):
-        dirslist, fileslist = visitdir(monitorpath, wwwroot, exclude_exts)
+        #dirslist, fileslist = visitdir(monitorpath, wwwroot, exclude_exts)
 	now_time = int(time.time())
 
         fileslist = None
@@ -82,9 +84,12 @@ class EventHandler(pyinotify.ProcessEvent):
                     	fl = f_sz[0]
                         if not fl.startswith('/'):
                             fl = join('/', fl)
+
                         hs_code = int(hashlib.md5(fl).hexdigest()[0:4], 16)%hash_num
                         workers = hash_config.get(hs_code) or []
-                        self._logging.debug('hash_code=%d, workers:%s, filepath=%s', hs_code, workers, fl)
+
+                        self._logging.info('hash_code=%d, workers:%s, filepath=%s', hs_code, workers, fl)
+
                         for w in workers:
                             if workers_args.get(w) is None:
                                 workers_args[w] = []
@@ -92,14 +97,14 @@ class EventHandler(pyinotify.ProcessEvent):
 
                 args = workers_args.get(worker)
                 if args:
-                    res = download_list.apply_async(args=([], workers_args[workers], httphostname),
+                    res = download_list.apply_async(args=([], workers_args[worker], httphostname),
                                           queue=status['queue'], expires=WHOLE_SYNC_TASK_EXPIRES_TIME, retry=False)
                     status['last_whole_sync_time'] = time_now
                     self._logging.info("cron job: worker=%s, whole_sync taskid: %s", worker, res.id)
                 else:
                     self._logging.info("cron job: worker=%s, whole_sync is not in config_hash", worker)
             except Exception as e:
-                self._logging.error('all_workers_do_whole_sync exception: %s', e)	
+                self._logging.exception('all_workers_do_whole_sync exception: %s', e)	
 
     class CheckActivQueueThread(threading.Thread):
         def __init__(self, func):
@@ -135,25 +140,32 @@ class EventHandler(pyinotify.ProcessEvent):
                 status['last_whole_sync_time'] = 0
                 self.workers_status[worker] = status
 
+                self._logging.info("worker: %s, new online", worker)
                 try:
                     if dirslist is None:
 		        dirslist, fileslist = visitdir(monitorpath, wwwroot, exclude_exts)
 
                         for f_sz in fileslist:
-                            fl = f_sz[0] 
-                            if not fl.startswith('/'):
-                                fl = join('/', fl)
-                            hs_code = int(hashlib.md5(fl).hexdigest()[0:4], 16)%hash_num
-                            workers = hash_config.get(hs_code) or []
-                            self._logging.debug('hash_code=%d, workers:%s, filepath=%s', hs_code, workers, fl)
-                            for w in workers:
-                                if workers_args.get(w) is None:
-                                    workers_args[w] = []
-                                workers_args[w].append(f_sz)
+			    try:
+                                f = f_sz[0] 
+                                if not f.startswith('/'):
+                                    f = join('/', f)
+
+                                hs_code = int(hashlib.md5(f).hexdigest()[0:4], 16)%hash_num
+                                workers = hash_config.get(hs_code) or []
+
+                                self._logging.info('hash_code=%d, workers:%s, filepath=%s', hs_code, workers, f)
+
+                                for w in workers:
+                                    if workers_args.get(w) is None:
+                                        workers_args[w] = []
+                                    workers_args[w].append(f_sz)
+			    except Exception as e:
+				self._logging.exception('hash exception: %s', e)
 
                     args = workers_args.get(worker)
 		    if args:
-		        res = download_list.apply_async(args=([], workers_args[workers], httphostname),
+		        res = download_list.apply_async(args=([], workers_args[worker], httphostname),
 		    			     queue=status['queue'], expires=WHOLE_SYNC_TASK_EXPIRES_TIME, retry=False)
                         status['last_whole_sync_time'] = time_now
                         self._logging.info("worker: %s, new online, whole_sync taskid: %s", worker, res.id)
@@ -161,7 +173,7 @@ class EventHandler(pyinotify.ProcessEvent):
                         self._logging.error("whole_sync: worker=%s is not in hash_config", worker)
 
                 except Exception as e:
-                    self._logging.error('do whole_sync exception: %s', e)
+                    self._logging.exception('do whole_sync exception: %s', e)
 
             status['last_online_time'] = time_now
 
