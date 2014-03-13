@@ -32,7 +32,7 @@ from urlparse import urlsplit
 
 INSPECT_TIMEOUT = 30
 CHECK_ACTIVE_QUEUE_TIME = 60*2 #seconds
-MAX_OFFLINE_TIME =  3600*4   #seconds
+MAX_OFFLINE_TIME =  3600   #seconds
 WHOLE_SYNC_TASK_EXPIRES_TIME = MAX_OFFLINE_TIME/2
 DOWNLOAD_TASK_EXPIRES_TIME = 3600*24 
 
@@ -58,6 +58,11 @@ class EventHandler(pyinotify.ProcessEvent):
 
         #self._condition = Condition(Lock()) 
 
+	self.workers_config = set()
+	for workers in hash_config.itervalues():
+            self.workers_config.update(set(workers))
+        self._logging.info('workers in config: %s', self.workers_config)	
+
         self.activeQueueThread = self.CheckActivQueueThread(self.checkaliveworker)
         self.activeQueueThread.start()
 
@@ -66,7 +71,6 @@ class EventHandler(pyinotify.ProcessEvent):
         self.sched.start()
 
     def all_workers_do_whole_sync(self):
-        #dirslist, fileslist = visitdir(monitorpath, wwwroot, exclude_exts)
 	now_time = int(time.time())
 
         fileslist = None
@@ -136,6 +140,11 @@ class EventHandler(pyinotify.ProcessEvent):
         for worker in self.active_queues:
             queue0 = self.active_queues[worker][0]
             status = self.workers_status.get(worker)
+
+            if worker not in self.workers_config:
+                self._logging.info("worker=%s is not in workers_config=%s, skip", worker, self.workers_config)
+                continue
+
             if status is None:
 		status = {}
                 status['queue'] = queue0['name']
