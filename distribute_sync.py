@@ -31,7 +31,7 @@ import hashlib
 from urlparse import urlsplit
 
 INSPECT_TIMEOUT = 30
-CHECK_ACTIVE_QUEUE_TIME = 60 #seconds
+CHECK_ACTIVE_QUEUE_TIME = 60*2 #seconds
 MAX_OFFLINE_TIME =  3600*4   #seconds
 WHOLE_SYNC_TASK_EXPIRES_TIME = MAX_OFFLINE_TIME/2
 DOWNLOAD_TASK_EXPIRES_TIME = 3600*24 
@@ -40,7 +40,7 @@ class EventHandler(pyinotify.ProcessEvent):
     def __init__(self, app, monitorpath = '/data/', hostname = 'http://127.0.0.1'):
         self._logging = logging.getLogger(self.__class__.__name__)
         self.app = app
-        app.control.rate_limit('celeryfilesync.tasks.download_list', '2/h')
+        app.control.rate_limit('celeryfilesync.tasks.download_list', '0.5/h')
 
         self.monitorpath = monitorpath
 
@@ -62,7 +62,7 @@ class EventHandler(pyinotify.ProcessEvent):
         self.activeQueueThread.start()
 
         self.sched = Scheduler()
-        self.sched.add_cron_job(self.all_workers_do_whole_sync , day_of_week='*', hour='*/3', minute=0, second=0)
+        self.sched.add_cron_job(self.all_workers_do_whole_sync , day_of_week='*', hour='*/6', minute=0, second=0)
         self.sched.start()
 
     def all_workers_do_whole_sync(self):
@@ -263,7 +263,7 @@ class EventHandler(pyinotify.ProcessEvent):
 
     def async_notifywoker(self, q, func, args = ()):
         try:
-            self._logging.info("push: %s.apply_async(args=%s, queue=%s)", func, arg, q)
+            self._logging.info("push: %s.apply_async(args=%s, queue=%s)", func, args, q)
             res = func.apply_async(args=args, queue=q, expires=DOWNLOAD_TASK_EXPIRES_TIME, retry=True,
                                                                      retry_policy={
                                                                                     'max_retries': 3,
@@ -273,7 +273,7 @@ class EventHandler(pyinotify.ProcessEvent):
                                   )
             self._logging.info("taskid: %s", res.id)
         except Exception as e:
-            self._logging.errno("async_notifywoker(queue=%s, func=%s), exception: %s  ", q, func, e)
+            self._logging.exception("async_notifywoker(queue=%s, func=%s), exception: %s  ", q, func, e)
 
     def notifyworker(self, func, arg = ()):
         for worker, status in self.workers_status.items():
@@ -289,7 +289,7 @@ class EventHandler(pyinotify.ProcessEvent):
                                        ) 
                 self._logging.info("taskid: %s", res.id)
             except Exception as e:
-                self._logging.errno("Exception occur while doing: %s(arg=%s, queue=%s), except: %s  ",
+                self._logging.exception("Exception occur while doing: %s(arg=%s, queue=%s), except: %s  ",
                                                                   func, arg, q, e)
 def check_runtime_env():
     if hash_num != len(hash_config):
