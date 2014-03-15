@@ -30,11 +30,12 @@ from config_distribute import monitorpath, wwwroot, httphostname, broker, backen
 import hashlib
 from urlparse import urlsplit
 
-INSPECT_TIMEOUT = 30
-CHECK_ACTIVE_QUEUE_TIME = 60*2 #seconds
-MAX_OFFLINE_TIME =  3600   #seconds
-WHOLE_SYNC_TASK_EXPIRES_TIME = MAX_OFFLINE_TIME/2
-DOWNLOAD_TASK_EXPIRES_TIME = 3600*24 
+INSPECT_TIMEOUT = 30                  #seconds
+CHECK_ACTIVE_QUEUE_TIME = 60*2        #seconds
+MAX_OFFLINE_TIME = 1800               #seconds
+WHOLE_SYNC_TASK_EXPIRES_TIME = 3600   #seconds
+WHOLE_TIME_INTERVAL = 3600            #seconds
+DOWNLOAD_TASK_EXPIRES_TIME = 3600*24  #seconds
 
 class EventHandler(pyinotify.ProcessEvent):
     def __init__(self, app, monitorpath = '/data/', hostname = 'http://127.0.0.1'):
@@ -71,15 +72,15 @@ class EventHandler(pyinotify.ProcessEvent):
         self.sched.start()
 
     def all_workers_do_whole_sync(self):
-	now_time = int(time.time())
+	time_now = int(time.time())
 
         fileslist = None
         workers_args = {}
 
         for worker, status in self.workers_status.items():
-	    if now_time - status['last_whole_sync_time'] < WHOLE_SYNC_TASK_EXPIRES_TIME:
+	    if time_time - status['last_whole_sync_time'] < WHOLE_TIME_INTERVAL:
 	        self._logging.info("worker:%s do whole_sync too frequent(%s seconds), skip this time",
-				    worker, now_time - status['last_whole_sync_time'])	
+				    worker, time_now - status['last_whole_sync_time'])	
 		continue
 
             try:
