@@ -7,6 +7,8 @@ dstdir = '/data/ysten'
 dstwwwroot = dstdir
 dstmonitorpath = dstwwwroot
 
+WHOLE_SYNC_TASK_EXPIRES_TIME = 3600*2 #seconds
+
 #file in special_exts download it anyway
 special_exts=['.m3u8']
 

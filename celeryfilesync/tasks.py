@@ -27,7 +27,7 @@ from os import errno
 from visitdir import visitdir
 
 from config_worker import dstwwwroot, dstmonitorpath, dstdir, MAX_RETRY_TIMES, worker_broker, worker_backend
-from config_worker import special_exts, exclude_exts
+from config_worker import special_exts, exclude_exts, WHOLE_SYNC_TASK_EXPIRES_TIME
 
 from utils.threadpool import ThreadPool
 
@@ -252,7 +252,17 @@ def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):
     download_count = len(downloadfiles)
     logger.warn("download tasks count = %s", download_count)
 
+    expires_time = WHOLE_SYNC_TASK_EXPIRES_TIME + 3600
+
     for f, sz in rmfiles:
+        last_modified_time = os.path.getmtime(f)
+        time_now = time.time()
+
+        if time_now - last_modified_time  < expires_time:
+            logger.info('file: %s now_time(%s) - last_modified_time(%s) = %ss less than whole_sync_task_expires_time(%ss), skip',
+                                 f, time.ctime(time_now), time.ctime(last_modified_time), time_now - last_modified_time, expires_time)
+            contiune
+
         file = join(dstdir, f)
         localfilesz = None
 	if os.path.exists(file): 
