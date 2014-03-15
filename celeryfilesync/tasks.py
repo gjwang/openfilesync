@@ -269,7 +269,7 @@ def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):
         if time_now - last_modified_time  < expires_time:
             logger.info('file: %s now_time(%s) - last_modified_time(%s) = %ss less than whole_sync_task_expires_time(%ss), skip',
                                  file, time.ctime(time_now), time.ctime(last_modified_time), time_now - last_modified_time, expires_time)
-            contiune
+            continue
 
 
         is_skip = False
