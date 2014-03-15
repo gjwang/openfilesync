@@ -78,7 +78,7 @@ class EventHandler(pyinotify.ProcessEvent):
         workers_args = {}
 
         for worker, status in self.workers_status.items():
-	    if time_time - status['last_whole_sync_time'] < WHOLE_TIME_INTERVAL:
+	    if time_now - status['last_whole_sync_time'] < WHOLE_TIME_INTERVAL:
 	        self._logging.info("worker:%s do whole_sync too frequent(%s seconds), skip this time",
 				    worker, time_now - status['last_whole_sync_time'])	
 		continue
