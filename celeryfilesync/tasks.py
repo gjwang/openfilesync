@@ -255,18 +255,22 @@ def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):
     expires_time = WHOLE_SYNC_TASK_EXPIRES_TIME + 3600
 
     for f, sz in rmfiles:
-        last_modified_time = os.path.getmtime(f)
+        file = join(dstdir, f)
+        localfilesz = None
+        if os.path.exists(file):
+            localfilesz = getsize(file)
+        else:
+            logger.info('file=%s not exist, skip', file)
+            continue
+
+        last_modified_time = os.path.getmtime(file)
         time_now = time.time()
 
         if time_now - last_modified_time  < expires_time:
             logger.info('file: %s now_time(%s) - last_modified_time(%s) = %ss less than whole_sync_task_expires_time(%ss), skip',
-                                 f, time.ctime(time_now), time.ctime(last_modified_time), time_now - last_modified_time, expires_time)
+                                 file, time.ctime(time_now), time.ctime(last_modified_time), time_now - last_modified_time, expires_time)
             contiune
 
-        file = join(dstdir, f)
-        localfilesz = None
-	if os.path.exists(file): 
-	    localfilesz = getsize(file)
 
         is_skip = False
 	for dlf, dlsz in downloadfiles:
