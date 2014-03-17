@@ -80,11 +80,13 @@ def download(url, filesize = None, localFileName = None):
 
         filesize = file_len
 
-        if os.path.exists(localName) and getsize(localName) == filesize and \
-	   splitext(localName)[1].lower() not in special_exts:
-            logger.info("File \'%s\' existed and filesize(%s) equals, skip", url, filesize)
-            r.close()
-	    return True
+        if os.path.exists(localName) and splitext(localName)[1].lower() not in special_exts:
+            if getsize(localName) == filesize:
+                logger.info("File \'%s\' existed and filesize(%s) equals, skip", url, filesize)
+                r.close()
+	        return True
+            else:
+                logger.error("File \'%s\' existed, but file_len(%s) != local_filesize(%s), redownload", url, filesize, getsize(localName))
 
         dstdirname = dirname(localName)
         if not os.path.exists(dstdirname):
@@ -255,34 +257,38 @@ def download_list(srcdirs = [], srcfiles = [], hostname = 'http://127.0.0.1'):
     expires_time = WHOLE_SYNC_TASK_EXPIRES_TIME + 3600
 
     for f, sz in rmfiles:
-        file = join(dstdir, f)
-        localfilesz = None
-        if os.path.exists(file):
-            localfilesz = getsize(file)
-        else:
-            logger.info('file=%s not exist, skip', file)
-            continue
+        try:
+            file = join(dstdir, f)
+            localfilesz = None
+            if os.path.exists(file):
+                localfilesz = getsize(file)
+            else:
+                logger.info('file=%s not exist, skip', file)
+                continue
 
-        last_modified_time = os.path.getmtime(file)
-        time_now = time.time()
+            last_modified_time = os.path.getmtime(file)
+            time_now = time.time()
 
-        if time_now - last_modified_time  < expires_time:
-            logger.info('file: %s now_time(%s) - last_modified_time(%s) = %ss less than whole_sync_task_expires_time(%ss), skip',
-                                 file, time.ctime(time_now), time.ctime(last_modified_time), time_now - last_modified_time, expires_time)
-            continue
+            if time_now - last_modified_time  < expires_time:
+                logger.info('file: %s now_time(%s) - last_modified_time(%s) = %ss less than whole_sync_task_expires_time(%ss), skip',
+                             file, time.ctime(time_now), time.ctime(last_modified_time), time_now - last_modified_time, expires_time)
+                continue
 
 
-        is_skip = False
-	for dlf, dlsz in downloadfiles:
-	    if f == dlf:
-                logger.info('file:%s is in download list, suggest_size(%s) =? scan_size(%s), real_size:%s, skip',
+            is_skip = False
+	    for dlf, dlsz in downloadfiles:
+	        if f == dlf:
+                    logger.info('file:%s is in download list, suggest_size(%s) =? scan_size(%s), real_size:%s, skip',
 				 f, dlsz, sz, localfilesz)
-		is_skip = True
-                break 
+		    is_skip = True
+                    break 
 
-        if not is_skip:
-            logger.info('Going to rm file: %s, filesize=%s', file, localfilesz)
-            rmfile(None, file)
+            if not is_skip:
+                logger.info('Going to rm file: %s, filesize=%s', file, localfilesz)
+                rmfile(None, file)
+        except Exception as e:
+            logger.exception('check rm file: %s exception', f)
+
 
     if download_count > 0:
         ThreadPool.initialize()
