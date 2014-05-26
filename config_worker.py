@@ -17,5 +17,5 @@ HANDLER_THREAD_COUNT = 4
 TASK_QUEUE_MAX_SIZE = 65536
 
 #use 2**retry_times backoff methon, don't retry too much times unless you kwow what you are doing
-MAX_RETRY_TIMES = 6
+MAX_RETRY_TIMES = 3
 
