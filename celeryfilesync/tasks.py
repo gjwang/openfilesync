@@ -77,6 +77,8 @@ def download(url, filesize = None, localFileName = None):
 
         if filesize is not None and filesize != file_len:
             logger.error("filesize(%s) != file_len(%s): %s", filesize, file_len, url)
+            if file_len == 0:
+                raise Exception("Get file_len=0 from nginx, retry again ")
 
         filesize = file_len
 
