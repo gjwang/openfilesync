@@ -145,9 +145,10 @@ class EventHandler(pyinotify.ProcessEvent):
         #print "event: %s" % pformat(event)
 
         if event.dir == True:
-            relativepath = event.pathname[self.monpath_length:]
-            self._logging.info("Creating folder: \'%s\', relativepath %s", event.pathname, relativepath)
-            mkemptydir(relativepath = relativepath)
+            pass
+            #relativepath = event.pathname[self.monpath_length:]
+            #self._logging.info("Creating folder: \'%s\', relativepath %s", event.pathname, relativepath)
+            #mkemptydir(relativepath = relativepath)
         else:
             self._logging.info("Creating file: \'%s\'. Ignore this event", event.pathname)
 
